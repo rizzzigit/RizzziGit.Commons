@@ -110,6 +110,7 @@ public abstract class Lifetime : ILifetime
           {
             try
             {
+              taskQueueCancellationTokenSource.Cancel();
               await taskQueueTask;
             }
             finally
