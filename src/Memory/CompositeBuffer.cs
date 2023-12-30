@@ -85,10 +85,10 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
         while (buffer.Length < length)
         {
           byte[] bytes = new byte[(int)long.Min(length - buffer.Length, int.MaxValue / 2)];
-        buffer.Append(bytes);
-      }
+          buffer.Append(bytes);
+        }
 
-      return buffer;
+        return buffer;
       }
     }
     else
@@ -699,17 +699,17 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
       long length = 0;
 
       foreach (CompositeBuffer input in inputs)
-  {
-        lock (input)
       {
-        Blocks.AddRange(input.Blocks);
+        lock (input)
+        {
+          Blocks.AddRange(input.Blocks);
           length += input.Length;
         }
       }
 
       Length += length;
       return length;
-      }
+    }
   }
 
   public long Prepend(byte[] input) => Prepend(input, 0, input.Length);
@@ -731,17 +731,17 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
       long length = 0;
 
       foreach (CompositeBuffer input in inputs)
-  {
-        lock (input)
       {
-        Blocks.InsertRange(0, input.Blocks);
+        lock (input)
+        {
+          Blocks.InsertRange(0, input.Blocks);
           length += input.Length;
         }
       }
 
       Length += length;
       return length;
-      }
+    }
   }
 
   public override bool Equals(object? target) => ReferenceEquals(this, target) || Equals(target as CompositeBuffer);
@@ -753,5 +753,20 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
 
     int hashCode = hashCodeBuilder.ToHashCode();
     return hashCode;
+  }
+
+  IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+  public IEnumerator<byte> GetEnumerator()
+  {
+    lock (this)
+    {
+      foreach (byte[] block in Blocks)
+      {
+        foreach (byte blockEntry in block)
+        {
+          yield return blockEntry;
+        }
+      }
+    }
   }
 }
