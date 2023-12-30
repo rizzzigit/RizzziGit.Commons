@@ -1,3 +1,5 @@
+using System.Collections;
+
 namespace RizzziGit.Framework.Memory;
 
 using Extensions.Array;
@@ -12,7 +14,7 @@ public enum PaddingType
   Left, Right
 }
 
-public class CompositeBuffer
+public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<CompositeBuffer>
 {
   private static bool Compare(CompositeBuffer? left, object? right)
   {
@@ -61,32 +63,33 @@ public class CompositeBuffer
   public static explicit operator ulong(CompositeBuffer input) => input.ToUInt64();
   public static explicit operator string(CompositeBuffer input) => input.ToString();
 
-  public static explicit operator CompositeBuffer(byte[] input) => From(input);
-  public static explicit operator CompositeBuffer(sbyte input) => From(input);
-  public static explicit operator CompositeBuffer(byte input) => From(input);
-  public static explicit operator CompositeBuffer(short input) => From(input);
-  public static explicit operator CompositeBuffer(ushort input) => From(input);
-  public static explicit operator CompositeBuffer(int input) => From(input);
-  public static explicit operator CompositeBuffer(uint input) => From(input);
-  public static explicit operator CompositeBuffer(long input) => From(input);
-  public static explicit operator CompositeBuffer(ulong input) => From(input);
-  public static explicit operator CompositeBuffer(string input) => From(input);
+  public static implicit operator CompositeBuffer(byte[] input) => From(input);
+  public static implicit operator CompositeBuffer(sbyte input) => From(input);
+  public static implicit operator CompositeBuffer(byte input) => From(input);
+  public static implicit operator CompositeBuffer(short input) => From(input);
+  public static implicit operator CompositeBuffer(ushort input) => From(input);
+  public static implicit operator CompositeBuffer(int input) => From(input);
+  public static implicit operator CompositeBuffer(uint input) => From(input);
+  public static implicit operator CompositeBuffer(long input) => From(input);
+  public static implicit operator CompositeBuffer(ulong input) => From(input);
+  public static implicit operator CompositeBuffer(string input) => From(input);
 
   public static CompositeBuffer Allocate(long length)
   {
-    if (length > int.MaxValue / 2)
+    if (length > (int.MaxValue / 2))
     {
       CompositeBuffer buffer = Empty();
 
-      for (long currentLength = 0; currentLength < length;)
+      lock (buffer)
       {
-        byte[] bytes = new byte[(int)long.Min(length - currentLength, int.MaxValue / 2)];
-
+        while (buffer.Length < length)
+        {
+          byte[] bytes = new byte[(int)long.Min(length - buffer.Length, int.MaxValue / 2)];
         buffer.Append(bytes);
-        currentLength += bytes.LongLength;
       }
 
       return buffer;
+      }
     }
     else
     {
@@ -94,7 +97,7 @@ public class CompositeBuffer
     }
   }
 
-  public static CompositeBuffer Empty() => new(new List<byte[]>(), 0);
+  public static CompositeBuffer Empty() => new([], 0);
   public static CompositeBuffer Random(int length) => Random(length, System.Random.Shared);
   public static CompositeBuffer Random(int length, Random random)
   {
@@ -105,7 +108,7 @@ public class CompositeBuffer
 
   public static CompositeBuffer Concat(List<CompositeBuffer> buffers)
   {
-    List<byte[]> blocks = new();
+    List<byte[]> blocks = [];
     long length = 0;
 
     foreach (CompositeBuffer buffer in buffers)
@@ -137,7 +140,7 @@ public class CompositeBuffer
   };
 
   public static CompositeBuffer From(sbyte input) => From((byte)input);
-  public static CompositeBuffer From(byte input) => FromNumber(new byte[] { input });
+  public static CompositeBuffer From(byte input) => FromNumber([input]);
   public static CompositeBuffer From(ushort input) => FromNumber(BitConverter.GetBytes(input));
   public static CompositeBuffer From(short input) => FromNumber(BitConverter.GetBytes(input));
   public static CompositeBuffer From(ulong input) => FromNumber(BitConverter.GetBytes(input));
@@ -168,7 +171,7 @@ public class CompositeBuffer
 
   private CompositeBuffer(long length)
   {
-    Blocks = new();
+    Blocks = [];
     Length = length;
   }
 
@@ -186,7 +189,7 @@ public class CompositeBuffer
       long result = 0;
       lock (this)
       {
-        List<byte[]> knownBlocks = new();
+        List<byte[]> knownBlocks = [];
         foreach (byte[] block in Blocks)
         {
           bool isKnown = false;
@@ -312,15 +315,16 @@ public class CompositeBuffer
       ResolveIndex(position, out int x, out int y);
 
       int read = 0;
-      for (int index = x; read < outputLength; index++)
+      for (int index = x; (index < Blocks.Count) && (read < long.Min(outputLength, Length)); index++)
       {
         int length = int.Min(Blocks[index].Length, outputLength - read);
+
         Array.Copy(Blocks[index], index == x ? y : 0, output, read + outputOffset, length);
 
         read += length;
       }
 
-      return outputLength;
+      return read;
     }
   }
 
@@ -348,12 +352,10 @@ public class CompositeBuffer
         ResolveIndex(position, out int x, out int y);
 
         int written = 0;
-        for (int index = x; written < inputLength; index++)
+        for (int index = x; (index < Blocks.Count) && (written < inputLength); index++)
         {
           int length = int.Min(Blocks[index].Length, inputLength - written);
           Array.Copy(input, index == x ? y : 0, Blocks[index], written + inputOffset, length);
-
-          // written += Blocks[index].Write(index == x ? y : 0, input, written + inputOffset, length);
           written += length;
         }
       }
@@ -383,11 +385,7 @@ public class CompositeBuffer
 
         lock (this)
         {
-          List<byte[]> newBlocks = new();
-          newBlocks.AddRange(SliceBlocks(0, position));
-          newBlocks.AddRange(input.Blocks);
-          newBlocks.AddRange(SliceBlocks(position + input.Length));
-          Blocks = newBlocks;
+          Blocks = [.. SliceBlocks(0, position), .. input.Blocks, .. SliceBlocks(position + input.Length)];
         }
       }
     }
@@ -435,7 +433,7 @@ public class CompositeBuffer
       }
       else if ((end - start) == 0)
       {
-        return new();
+        return [];
       }
       else if (start > Length)
       {
@@ -446,7 +444,7 @@ public class CompositeBuffer
         throw new ArgumentOutOfRangeException(nameof(end));
       }
 
-      List<byte[]> newBlocks = new();
+      List<byte[]> newBlocks = [];
       long remainingOffset = start;
       long remainingLength = end - start;
 
@@ -516,6 +514,7 @@ public class CompositeBuffer
 
         written += length;
       }
+
       return output;
     }
   }
@@ -614,7 +613,7 @@ public class CompositeBuffer
         throw new ArgumentOutOfRangeException(nameof(end));
       }
 
-      List<byte[]> splicedBuffers = new();
+      List<byte[]> splicedBuffers = [];
       long remainingOffset = start;
       long remainingLength = end - start;
 
@@ -677,7 +676,6 @@ public class CompositeBuffer
       }
 
       Length -= end - start;
-
       return new(splicedBuffers, end - start);
     }
   }
@@ -694,14 +692,23 @@ public class CompositeBuffer
     return inputLength;
   }
 
-  public long Append(CompositeBuffer input)
+  public long Append(params CompositeBuffer[] inputs)
   {
-    lock (this) lock (input)
+    lock (this)
+    {
+      long length = 0;
+
+      foreach (CompositeBuffer input in inputs)
+  {
+        lock (input)
       {
         Blocks.AddRange(input.Blocks);
-        Length += input.Length;
+          length += input.Length;
+        }
+      }
 
-        return input.Length;
+      Length += length;
+      return length;
       }
   }
 
@@ -717,26 +724,27 @@ public class CompositeBuffer
     return inputLength;
   }
 
-  public long Prepend(CompositeBuffer input)
+  public long Prepend(params CompositeBuffer[] inputs)
   {
-    lock (this) lock (input)
+    lock (this)
+    {
+      long length = 0;
+
+      foreach (CompositeBuffer input in inputs)
+  {
+        lock (input)
       {
         Blocks.InsertRange(0, input.Blocks);
-        Length += input.Length;
+          length += input.Length;
+        }
+      }
 
-        return input.Length;
+      Length += length;
+      return length;
       }
   }
 
-  public override bool Equals(object? target)
-  {
-    if (ReferenceEquals(this, target))
-    {
-      return true;
-    }
-
-    return Equals(target as CompositeBuffer);
-  }
+  public override bool Equals(object? target) => ReferenceEquals(this, target) || Equals(target as CompositeBuffer);
 
   public override int GetHashCode()
   {
