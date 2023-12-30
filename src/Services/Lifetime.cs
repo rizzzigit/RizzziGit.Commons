@@ -98,16 +98,16 @@ public abstract class Lifetime : ILifetime
           {
             Started?.Invoke(this, new());
             await OnRun(linkedCancellationTokenSource.Token);
-
-            lock (this)
-            {
-              Source = null;
-            }
           }
           catch (OperationCanceledException) { }
           catch (Exception exception) { Exception = exception; }
           finally
           {
+            lock (this)
+            {
+              Source = null;
+            }
+
             try
             {
               taskQueueCancellationTokenSource.Cancel();
