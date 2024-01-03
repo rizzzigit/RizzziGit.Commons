@@ -45,13 +45,13 @@ public abstract class Lifetime : ILifetime
   public Exception? Exception { get; private set; } = null;
   private bool IsStarted;
 
-  public Task RunTask(Func<CancellationToken, Task> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task RunTask(Func<CancellationToken, Task> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
 
-  public Task RunTask(Action<CancellationToken> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task RunTask(Action callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<CancellationToken, T> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<T> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task RunTask(Action<CancellationToken> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task RunTask(Action callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<CancellationToken, T> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<T> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
 
   public CancellationToken GetCancellationToken() => Source!.Token;
   public void Reset()
