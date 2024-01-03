@@ -12,7 +12,7 @@ internal class GarbageCollectionEventListener
   }
 
   private static readonly Mutex CheckersMutex = new();
-  private static readonly List<WeakReference<Action>> Checkers = new();
+  private static readonly List<WeakReference<Action>> Checkers = [];
   private static Task? CheckThread;
 
   private static Task RunCheck()
