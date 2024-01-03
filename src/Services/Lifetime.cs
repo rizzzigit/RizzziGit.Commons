@@ -46,12 +46,16 @@ public abstract class Lifetime : ILifetime
   private bool IsStarted;
 
   public Task RunTask(Func<CancellationToken, Task> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-
   public Task RunTask(Action<CancellationToken> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task RunTask(Func<Task> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
   public Task RunTask(Action callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task RunTask(TaskQueueEntryDefinition definition, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(definition, cancellationToken);
+
+  public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
   public Task<T> RunTask<T>(Func<CancellationToken, T> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<Task<T>> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
   public Task<T> RunTask<T>(Func<T> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(TaskQueueEntryDefinition<T> definition, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(definition, cancellationToken);
 
   public CancellationToken GetCancellationToken() => Source!.Token;
   public void Reset()
