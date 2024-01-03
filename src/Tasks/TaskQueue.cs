@@ -88,20 +88,20 @@ public sealed class TaskQueue : IDisposable
     }
   }
 
-  public async Task Start(CancellationToken cancellationToken = default)
+  public Task Start(CancellationToken cancellationToken = default) => Task.Run(async () =>
   {
-    try
+    lock (this)
     {
-      lock (this)
+      if (SynchronizationContext != null)
       {
-        if (SynchronizationContext == null)
-        {
-          throw new InvalidOperationException("Task queue has already started.");
-        }
-
-        SynchronizationContext = SynchronizationContext.Current;
+        throw new InvalidOperationException("Task queue has already started.");
       }
 
+      SynchronizationContext = SynchronizationContext.Current;
+    }
+
+    try
+    {
       await foreach (var (callback, remoteCancellationToken, taskCompletionSource) in WaitQueue.WithCancellation(cancellationToken))
       {
         try
@@ -135,5 +135,5 @@ public sealed class TaskQueue : IDisposable
         throw;
       }
     }
-  }
+  }, CancellationToken.None);
 }
