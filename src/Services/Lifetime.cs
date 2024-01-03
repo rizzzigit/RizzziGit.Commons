@@ -47,8 +47,11 @@ public abstract class Lifetime : ILifetime
 
   public Task RunTask(Func<CancellationToken, Task> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
   public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task RunTask(Action callback) => TaskQueue!.RunTask(callback);
-  public Task<T> RunTask<T>(Func<T> callback) => TaskQueue!.RunTask(callback);
+
+  public Task RunTask(Action<CancellationToken> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task RunTask(Action callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<CancellationToken, T> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<T> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
 
   public CancellationToken GetCancellationToken() => Source!.Token;
   public void Reset()

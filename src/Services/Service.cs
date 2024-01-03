@@ -46,12 +46,13 @@ public abstract class Service
   private TaskQueue? TaskQueue;
   private ServiceContext? Context;
 
-  private TaskQueue RequireTaskQueue() => TaskQueue ?? throw new NotImplementedException();
+  public Task RunTask(Func<CancellationToken, Task> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
 
-  public Task RunTask(Func<CancellationToken, Task> callback, CancellationToken? cancellationToken = null) => RequireTaskQueue().RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken? cancellationToken = null) => RequireTaskQueue().RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<T> callback) => RequireTaskQueue().RunTask(callback);
-  public Task RunTask(Action callback) => RequireTaskQueue().RunTask(callback);
+  public Task RunTask(Action<CancellationToken> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task RunTask(Action callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<CancellationToken, T> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
+  public Task<T> RunTask<T>(Func<T> callback, CancellationToken? cancellationToken = null) => TaskQueue!.RunTask(callback, cancellationToken);
 
   public CancellationToken GetCancellationToken() => Context?.CancellationTokenSource.Token ?? new(true);
 

@@ -11,6 +11,8 @@ internal class TaskQueue : IDisposable
 
   public async Task RunTask(Func<CancellationToken, Task> callback, CancellationToken? cancellationToken = null)
   {
+    cancellationToken?.ThrowIfCancellationRequested();
+
     TaskCompletionSource taskCompletionSource = new();
     await WaitQueue.Enqueue((callback, cancellationToken ?? CancellationToken.None, taskCompletionSource), cancellationToken ?? CancellationToken.None);
     await taskCompletionSource.Task;
@@ -18,6 +20,8 @@ internal class TaskQueue : IDisposable
 
   public async Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken? cancellationToken = null)
   {
+    cancellationToken?.ThrowIfCancellationRequested();
+
     TaskCompletionSource<T> taskCompletionSource = new();
     try
     {
@@ -34,12 +38,25 @@ internal class TaskQueue : IDisposable
     return await taskCompletionSource.Task;
   }
 
-  public Task<T> RunTask<T>(Func<T> callback) => RunTask((_) => Task.FromResult(callback()));
-  public Task RunTask(Action callback) => RunTask((_) =>
+  public Task<T> RunTask<T>(Func<T> callback, CancellationToken? cancellationToken = null) => RunTask((_) => callback(), cancellationToken);
+  public Task<T> RunTask<T>(Func<CancellationToken, T> callback, CancellationToken? cancellationToken = null)
   {
-    callback();
-    return Task.CompletedTask;
-  });
+    cancellationToken?.ThrowIfCancellationRequested();
+
+    return RunTask((cancellationToken) => Task.FromResult(callback(cancellationToken)), cancellationToken);
+  }
+
+  public Task RunTask(Action callback, CancellationToken? cancellationToken = null) => RunTask((_) => callback(), cancellationToken);
+  public Task RunTask(Action<CancellationToken> callback, CancellationToken? cancellationToken = null)
+  {
+    cancellationToken?.ThrowIfCancellationRequested();
+
+    return RunTask((cancellationToken) =>
+    {
+      callback(cancellationToken);
+      return Task.CompletedTask;
+    }, cancellationToken);
+  }
 
   public async Task Start(CancellationToken cancellationToken)
   {
@@ -54,6 +71,13 @@ internal class TaskQueue : IDisposable
           remoteCancellationToken,
           cancellationToken
         );
+
+        if (linkedCancellationTokenSource.IsCancellationRequested)
+        {
+          taskCompletionSource.SetCanceled(linkedCancellationTokenSource.Token);
+
+          continue;
+        }
 
         try
         {
