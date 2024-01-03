@@ -102,38 +102,43 @@ public sealed class TaskQueue : IDisposable
 
     try
     {
-      await foreach (var (callback, remoteCancellationToken, taskCompletionSource) in WaitQueue.WithCancellation(cancellationToken))
+      try
       {
-        try
+        await foreach (var (callback, remoteCancellationToken, taskCompletionSource) in WaitQueue.WithCancellation(cancellationToken))
         {
-          using CancellationTokenSource linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
-            remoteCancellationToken,
-            cancellationToken
-          );
+          try
+          {
+            using CancellationTokenSource linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
+              remoteCancellationToken,
+              cancellationToken
+            );
 
-          await callback(linkedCancellationTokenSource.Token);
-          taskCompletionSource.SetResult();
-        }
-        catch (Exception exception)
-        {
-          taskCompletionSource.SetException(exception);
+            await callback(linkedCancellationTokenSource.Token);
+            taskCompletionSource.SetResult();
+          }
+          catch (Exception exception)
+          {
+            taskCompletionSource.SetException(exception);
+          }
         }
       }
+      catch (Exception exception)
+      {
+        while (WaitQueue.Count != 0)
+        {
+          (await WaitQueue.Dequeue(cancellationToken)).taskCompletionSource.SetException(exception);
+        }
+
+        throw;
+      }
     }
-    catch (Exception exception)
+    finally
     {
       lock (this)
       {
         SynchronizationContext = null;
       }
-
-      while (WaitQueue.Count != 0)
-      {
-        var (_, _, source) = await WaitQueue.Dequeue(cancellationToken);
-
-        source.SetException(exception);
-        throw;
-      }
     }
+
   }, CancellationToken.None);
 }
