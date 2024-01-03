@@ -2,7 +2,7 @@ namespace RizzziGit.Framework.Tasks;
 
 using Collections;
 
-internal class TaskQueue : IDisposable
+public sealed class TaskQueue : IDisposable
 {
   private readonly WaitQueue<(Func<CancellationToken, Task> callback, CancellationToken cancellationToken, TaskCompletionSource taskCompletionSource)> WaitQueue = new();
 
