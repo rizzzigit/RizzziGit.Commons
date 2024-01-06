@@ -209,7 +209,7 @@ public abstract class Service
   }
 
   protected abstract Task OnStart(CancellationToken cancellationToken);
-  protected abstract Task OnRun(CancellationToken cancellationToken);
+  protected virtual Task OnRun(CancellationToken cancellationToken) => Task.Delay(-1, cancellationToken);
   protected abstract Task OnStop(Exception? exception);
 
   protected static async Task<(Service service, Task task)> WatchDog(Service[] services, CancellationToken cancellationToken)
