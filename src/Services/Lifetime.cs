@@ -29,7 +29,6 @@ public abstract class Lifetime : ILifetime
   public readonly Logger Logger;
 
   private CancellationTokenSource? Source;
-  private readonly TaskQueue TaskQueue = new();
 
   public bool IsRunning
   {
@@ -44,18 +43,6 @@ public abstract class Lifetime : ILifetime
 
   public Exception? Exception { get; private set; } = null;
   private bool IsStarted;
-
-  public Task RunTask(Func<CancellationToken, Task> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task RunTask(Action<CancellationToken> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task RunTask(Func<Task> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task RunTask(Action callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task RunTask(TaskQueueEntryDefinition definition, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(definition, cancellationToken);
-
-  public Task<T> RunTask<T>(Func<CancellationToken, Task<T>> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<CancellationToken, T> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<Task<T>> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(Func<T> callback, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(callback, cancellationToken);
-  public Task<T> RunTask<T>(TaskQueueEntryDefinition<T> definition, CancellationToken cancellationToken = default) => TaskQueue!.RunTask(definition, cancellationToken);
 
   public CancellationToken GetCancellationToken() => Source!.Token;
   public void Reset()
@@ -94,38 +81,23 @@ public abstract class Lifetime : ILifetime
 
       using (cancellationTokenSource)
       {
-        CancellationTokenSource taskQueueCancellationTokenSource = new();
-
-        using (taskQueueCancellationTokenSource)
+        Logger.Log(LogLevel.Verbose, "Lifetime started.");
+        try
         {
-          Task taskQueueTask = TaskQueue.Start(taskQueueCancellationTokenSource.Token);
-
-          Logger.Log(LogLevel.Verbose, "Lifetime started.");
-          try
+          Started?.Invoke(this, new());
+          await OnRun(linkedCancellationTokenSource.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception) { Exception = exception; }
+        finally
+        {
+          lock (this)
           {
-            Started?.Invoke(this, new());
-            await OnRun(linkedCancellationTokenSource.Token);
+            Source = null;
           }
-          catch (OperationCanceledException) { }
-          catch (Exception exception) { Exception = exception; }
-          finally
-          {
-            lock (this)
-            {
-              Source = null;
-            }
 
-            try
-            {
-              taskQueueCancellationTokenSource.Cancel();
-              await taskQueueTask;
-            }
-            finally
-            {
-              Logger.Log(LogLevel.Verbose, "Lifetime stopped.");
-              Stopped?.Invoke(this, new());
-            }
-          }
+          Logger.Log(LogLevel.Verbose, "Lifetime stopped.");
+          Stopped?.Invoke(this, new());
         }
       }
     }
