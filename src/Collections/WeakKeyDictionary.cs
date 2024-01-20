@@ -11,7 +11,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 {
   public WeakKeyDictionary()
   {
-    Dictionary = new();
+    Dictionary = [];
 
     GarbageCollectionEventListener.Register(CheckAllItems);
   }
@@ -27,7 +27,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
   {
     get
     {
-      lock (Dictionary)
+      lock (this)
       {
         return Dictionary.Count;
       }
@@ -49,7 +49,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 
   private void CheckAllItems()
   {
-    lock (Dictionary)
+    lock (this)
     {
       for (int index = 0; index < Dictionary.Count; index++)
       {
@@ -74,7 +74,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 
   public bool TryAdd(K key, V value)
   {
-    lock (Dictionary)
+    lock (this)
     {
       foreach (var lookup in Dictionary)
       {
@@ -91,7 +91,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 
   public void AddOrUpdate(K key, V value)
   {
-    lock (Dictionary)
+    lock (this)
     {
       foreach (var lookup in Dictionary)
       {
@@ -109,7 +109,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 
   public void Clear()
   {
-    lock (Dictionary)
+    lock (this)
     {
       Dictionary.Clear();
     }
@@ -117,7 +117,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 
   public bool Remove(K key)
   {
-    lock (Dictionary)
+    lock (this)
     {
       foreach (var lookup in Dictionary)
       {
@@ -134,7 +134,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 
   public bool TryGetValue(K key, [MaybeNullWhen(false)] out V value)
   {
-    lock (Dictionary)
+    lock (this)
     {
       foreach (var lookup in Dictionary)
       {
@@ -153,7 +153,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
   IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
   public IEnumerator<KeyValuePair<K, V>> GetEnumerator()
   {
-    lock (Dictionary)
+    lock (this)
     {
       foreach (var (key, value) in Dictionary)
       {
@@ -167,7 +167,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
 
   public bool ContainsKey(K key)
   {
-    lock (Dictionary)
+    lock (this)
     {
       foreach (var lookup in Dictionary)
       {
