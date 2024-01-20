@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Services;
+namespace RizzziGit.Framework.Lifetime;
 
 using Logging;
 using Tasks;
@@ -44,7 +44,7 @@ public abstract class Lifetime : ILifetime
   public Exception? Exception { get; private set; } = null;
   private bool IsStarted;
 
-  public CancellationToken GetCancellationToken() => Source!.Token;
+  public CancellationToken GetCancellationToken() => Source?.Token ?? new(true);
   public void Reset()
   {
     lock (this)
@@ -103,7 +103,7 @@ public abstract class Lifetime : ILifetime
     }
   }
 
-  public void Start(CancellationToken cancellationToken)
+  public virtual void Start(CancellationToken cancellationToken = default)
   {
     lock (this)
     {
@@ -119,6 +119,32 @@ public abstract class Lifetime : ILifetime
       Run(Source = new(), CancellationTokenSource.CreateLinkedTokenSource(
         cancellationToken, Source.Token
       ));
+    }
+  }
+
+  protected void Run(Action action, CancellationToken cancellationToken = default) => Run((_) => action(), cancellationToken);
+  protected void Run(Action<CancellationToken> action, CancellationToken cancellationToken = default)
+  {
+    CancellationTokenSource linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, GetCancellationToken());
+
+    linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+    lock (this)
+    {
+      linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+      action(linkedCancellationTokenSource.Token);
+    }
+  }
+
+  protected T Run<T>(Func<T> function, CancellationToken cancellationToken = default) => Run((_) => function(), cancellationToken);
+  protected T Run<T>(Func<CancellationToken, T> function, CancellationToken cancellationToken = default)
+  {
+    CancellationTokenSource linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, GetCancellationToken());
+
+    linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+    lock (this)
+    {
+      linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+      return function(linkedCancellationTokenSource.Token);
     }
   }
 }
