@@ -208,9 +208,9 @@ public abstract class Service
     try { await context.Task; } catch { }
   }
 
-  protected abstract Task OnStart(CancellationToken cancellationToken);
+  protected virtual Task OnStart(CancellationToken cancellationToken) => Task.CompletedTask;
   protected virtual Task OnRun(CancellationToken cancellationToken) => Task.Delay(-1, cancellationToken);
-  protected abstract Task OnStop(Exception? exception);
+  protected virtual Task OnStop(Exception? exception) => Task.CompletedTask;
 
   protected static async Task<(Service service, Task task)> WatchDog(Service[] services, CancellationToken cancellationToken)
   {
@@ -222,5 +222,31 @@ public abstract class Service
 
     Task task = await Task.WhenAny(tasks);
     return (services[tasks.IndexOf(task)], task);
+  }
+
+  protected void Run(Action action, CancellationToken cancellationToken = default) => Run((_) => action(), cancellationToken);
+  protected void Run(Action<CancellationToken> action, CancellationToken cancellationToken = default)
+  {
+    CancellationTokenSource linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, GetCancellationToken());
+
+    linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+    lock (this)
+    {
+      linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+      action(linkedCancellationTokenSource.Token);
+    }
+  }
+
+  protected T Run<T>(Func<T> function, CancellationToken cancellationToken = default) => Run((_) => function(), cancellationToken);
+  protected T Run<T>(Func<CancellationToken, T> function, CancellationToken cancellationToken = default)
+  {
+    CancellationTokenSource linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, GetCancellationToken());
+
+    linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+    lock (this)
+    {
+      linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+      return function(linkedCancellationTokenSource.Token);
+    }
   }
 }
