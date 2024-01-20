@@ -21,8 +21,6 @@ internal class GarbageCollectionEventListener
     {
       while (Checkers.Count != 0)
       {
-        await GCObj.Wait();
-
         lock (Checkers)
         {
           for (int index = 0; index < Checkers.Count; index++)
@@ -38,6 +36,8 @@ internal class GarbageCollectionEventListener
             Checkers.RemoveAt(index++);
           }
         }
+
+        await GCObj.Wait();
       }
     }, TaskCreationOptions.LongRunning);
 
