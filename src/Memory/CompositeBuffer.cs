@@ -61,6 +61,8 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   public static explicit operator uint(CompositeBuffer input) => input.ToUInt32();
   public static explicit operator long(CompositeBuffer input) => input.ToInt64();
   public static explicit operator ulong(CompositeBuffer input) => input.ToUInt64();
+  public static explicit operator Int128(CompositeBuffer input) => input.ToInt128();
+  public static explicit operator UInt128(CompositeBuffer input) => input.ToUInt128();
   public static explicit operator string(CompositeBuffer input) => input.ToString();
 
   public static implicit operator CompositeBuffer(byte[] input) => From(input);
@@ -72,6 +74,8 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   public static implicit operator CompositeBuffer(uint input) => From(input);
   public static implicit operator CompositeBuffer(long input) => From(input);
   public static implicit operator CompositeBuffer(ulong input) => From(input);
+  public static implicit operator CompositeBuffer(Int128 input) => From(input);
+  public static implicit operator CompositeBuffer(UInt128 input) => From(input);
   public static implicit operator CompositeBuffer(string input) => From(input);
 
   public static CompositeBuffer Allocate(long length)
@@ -140,23 +144,15 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   };
 
   public static CompositeBuffer From(sbyte input) => From((byte)input);
-  public static CompositeBuffer From(byte input) => FromNumber([input]);
-  public static CompositeBuffer From(ushort input) => FromNumber(BitConverter.GetBytes(input));
-  public static CompositeBuffer From(short input) => FromNumber(BitConverter.GetBytes(input));
-  public static CompositeBuffer From(ulong input) => FromNumber(BitConverter.GetBytes(input));
-  public static CompositeBuffer From(long input) => FromNumber(BitConverter.GetBytes(input));
-  public static CompositeBuffer From(uint input) => FromNumber(BitConverter.GetBytes(input));
-  public static CompositeBuffer From(int input) => FromNumber(BitConverter.GetBytes(input));
-  private static CompositeBuffer FromNumber(byte[] input)
-  {
-    input = [.. input];
-    if (BitConverter.IsLittleEndian)
-    {
-      Array.Reverse(input);
-    }
-
-    return new(input);
-  }
+  public static CompositeBuffer From(byte input) => new([input]);
+  public static CompositeBuffer From(ushort input) => new(BitConverter.GetBytes(input));
+  public static CompositeBuffer From(short input) => new(BitConverter.GetBytes(input));
+  public static CompositeBuffer From(uint input) => new(BitConverter.GetBytes(input));
+  public static CompositeBuffer From(int input) => new(BitConverter.GetBytes(input));
+  public static CompositeBuffer From(ulong input) => new(BitConverter.GetBytes(input));
+  public static CompositeBuffer From(long input) => new(BitConverter.GetBytes(input));
+  public static CompositeBuffer From(Int128 input) => From((UInt128)input);
+  public static CompositeBuffer From(UInt128 input) => Concat((ulong)(input & ulong.MaxValue), (ulong)(input >> 64));
 
   public CompositeBuffer(byte[] source) : this(source, 0, source.Length) { }
   public CompositeBuffer(byte[] source, int start, int end) : this(end - start)
@@ -534,31 +530,14 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
     };
   }
 
-  public ushort ToUInt16() => BitConverter.ToUInt16(ToNumber(2));
-  public short ToInt16() => BitConverter.ToInt16(ToNumber(2));
-  public uint ToUInt32() => BitConverter.ToUInt32(ToNumber(4));
-  public int ToInt32() => BitConverter.ToInt32(ToNumber(4));
-  public ulong ToUInt64() => BitConverter.ToUInt64(ToNumber(8));
-  public long ToInt64() => BitConverter.ToInt64(ToNumber(8));
-  private byte[] ToNumber(int size)
-  {
-    lock (this)
-    {
-      byte[] output = new byte[size];
-      if (Length != size)
-      {
-        throw new ArgumentOutOfRangeException(nameof(size));
-      }
-
-      Read(0, output, 0, size);
-      if (BitConverter.IsLittleEndian)
-      {
-        Array.Reverse(output);
-      }
-
-      return output;
-    }
-  }
+  public ushort ToUInt16() => BitConverter.ToUInt16(Slice(0, 2).ToByteArray());
+  public short ToInt16() => BitConverter.ToInt16(Slice(0, 2).ToByteArray());
+  public uint ToUInt32() => BitConverter.ToUInt32(Slice(0, 4).ToByteArray());
+  public int ToInt32() => BitConverter.ToInt32(Slice(0, 4).ToByteArray());
+  public ulong ToUInt64() => BitConverter.ToUInt64(Slice(0, 8).ToByteArray());
+  public long ToInt64() => BitConverter.ToInt64(Slice(0, 8).ToByteArray());
+  public Int128 ToInt128() => new(BitConverter.ToUInt64(Slice(8, 16).ToByteArray()), BitConverter.ToUInt64(Slice(0, 8).ToByteArray()));
+  public UInt128 ToUInt128() => new(BitConverter.ToUInt64(Slice(8, 16).ToByteArray()), BitConverter.ToUInt64(Slice(0, 8).ToByteArray()));
 
   public bool Equals(CompositeBuffer? target)
   {

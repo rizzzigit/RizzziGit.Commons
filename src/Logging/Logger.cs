@@ -4,7 +4,7 @@ public delegate void LoggerHandler(LogLevel level, string scope, string message,
 
 public enum LogLevel : byte
 {
-  Verbose = 5,
+  Debug = 5,
   Info = 4,
   Warn = 3,
   Error = 2,
