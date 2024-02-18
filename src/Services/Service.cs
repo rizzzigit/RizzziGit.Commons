@@ -204,10 +204,8 @@ public abstract class Service
     }
 
     Task task = await Task.WhenAny(tasks).WaitAsync(cancellationToken);
-    try
-    {
-      await task.WaitAsync(cancellationToken);
-    }
+
+    try { await task; }
     catch (Exception exception)
     {
       if (exception is OperationCanceledException operationCanceledException && cancellationToken == operationCanceledException.CancellationToken)
