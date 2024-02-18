@@ -11,81 +11,58 @@ internal class GarbageCollectionEventListener
     ~GCObj() => Source.SetResult();
   }
 
-  private static readonly Mutex CheckersMutex = new();
-  private static readonly List<WeakReference<Action>> Checkers = [];
-  private static Task? CheckThread;
+  private static readonly Dictionary<WeakReference<Action>, CancellationTokenSource> CancellationTokenSources = [];
 
-  private static Task RunCheck()
+  private static void Register(WeakReference<Action> action)
   {
-    Task task = new(async () =>
+    CancellationTokenSource cancellationTokenSource = new();
+
+    lock (CancellationTokenSources)
     {
-      while (Checkers.Count != 0)
-      {
-        lock (Checkers)
-        {
-          for (int index = 0; index < Checkers.Count; index++)
-          {
-            WeakReference<Action> reference = Checkers.ElementAt(index);
-
-            if (reference.TryGetTarget(out var action))
-            {
-              action();
-              continue;
-            }
-
-            Checkers.RemoveAt(index++);
-          }
-        }
-
-        await GCObj.Wait();
-      }
-    }, TaskCreationOptions.LongRunning);
-
-    task.Start();
-    return task;
-  }
-
-  private static void RunCheckThread()
-  {
-    CheckersMutex.WaitOne();
-    if ((CheckThread?.IsCompleted != null) && (!CheckThread.IsCompleted))
-    {
-      return;
+      CancellationTokenSources.Add(action, cancellationTokenSource);
     }
 
-    CheckThread = RunCheck();
-    CheckersMutex.ReleaseMutex();
+    wait(action);
+
+    return;
+
+    void wait(WeakReference<Action> action) => GCObj.Wait().ContinueWith((_) => check(action));
+    void check(WeakReference<Action> action)
+    {
+      Action handler;
+      lock (CancellationTokenSources)
+      {
+        if (!action.TryGetTarget(out Action? target) || cancellationTokenSource.IsCancellationRequested)
+        {
+          try { cancellationTokenSource.Dispose(); } catch { }
+          CancellationTokenSources.Remove(action);
+
+          return;
+        }
+
+        handler = target;
+      }
+
+      handler();
+      wait(action);
+    }
   }
+
+  public static void Register(Action action) => Register(new WeakReference<Action>(action));
 
   public static void Unregister(Action action)
   {
-    lock (Checkers)
+    lock (CancellationTokenSources)
     {
-      for (int index = 0; index < Checkers.Count; index++)
+      foreach (var (weakReference, cancellationTokenSource) in CancellationTokenSources)
       {
-        WeakReference<Action> reference = Checkers.ElementAt(index);
-
-        if (reference.TryGetTarget(out var lookupAction))
+        if (!weakReference.TryGetTarget(out Action? target) || target != action)
         {
-          if (lookupAction == action)
-          {
-            Checkers.RemoveAt(index++);
-          }
-
           continue;
         }
 
-        Checkers.RemoveAt(index++);
+        try { cancellationTokenSource.Cancel(); } catch { };
       }
     }
-  }
-
-  public static void Register(Action action)
-  {
-    lock (Checkers)
-    {
-      Checkers.Add(new(action));
-    }
-    RunCheckThread();
   }
 }
