@@ -2,14 +2,7 @@ namespace RizzziGit.Framework.Logging;
 
 public delegate void LoggerHandler(LogLevel level, string scope, string message, ulong timestamp);
 
-public enum LogLevel : byte
-{
-  Debug = 5,
-  Info = 4,
-  Warn = 3,
-  Error = 2,
-  Fatal = 1
-}
+public enum LogLevel : byte { Fatal, Error, Warn, Info, Debug }
 
 public sealed class Logger(string name)
 {
@@ -40,6 +33,7 @@ public sealed class Logger(string name)
     {
       if (logger.SubscribedLoggers[index] != this)
       {
+        continue;
       }
 
       logger.SubscribedLoggers.RemoveAt(index--);
@@ -67,4 +61,10 @@ public sealed class Logger(string name)
 
     InternalLog(level, null, message, (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds());
   }
+
+  public void Debug(string message) => Log(LogLevel.Debug, message);
+  public void Info(string message) => Log(LogLevel.Info, message);
+  public void Warn(string message) => Log(LogLevel.Warn, message);
+  public void Error(string message) => Log(LogLevel.Error, message);
+  public void Fatal(string message) => Log(LogLevel.Fatal, message);
 }
