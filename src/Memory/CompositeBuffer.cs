@@ -154,6 +154,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   public static CompositeBuffer From(Int128 input) => From((UInt128)input);
   public static CompositeBuffer From(UInt128 input) => Concat((ulong)(input & ulong.MaxValue), (ulong)(input >> 64));
 
+  public CompositeBuffer() : this([], 0) { }
   public CompositeBuffer(byte[] source) : this(source, 0, source.Length) { }
   public CompositeBuffer(byte[] source, int start, int end) : this(end - start)
   {
