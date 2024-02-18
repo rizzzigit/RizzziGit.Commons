@@ -2,18 +2,19 @@ namespace RizzziGit.Framework.Collections;
 
 public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnumerable<T>
 {
-  private readonly int? Capacity = capacity;
   private readonly Queue<T> Backlog = new();
   private readonly Queue<TaskCompletionSource<TaskCompletionSource<T>>> InsertQueue = new();
   private readonly Queue<TaskCompletionSource<T>> RemoveQueue = new();
+
+  private bool IsDisposed = false;
+  private Exception? Exception;
+
+  public readonly int? Capacity = capacity;
 
   public int BacklogCount => Backlog.Count;
   public int InsertQueueCount => InsertQueue.Count;
   public int RemoveQueueCount => RemoveQueue.Count;
   public int Count => BacklogCount + InsertQueueCount + RemoveQueueCount;
-
-  private bool IsDisposed = false;
-  private Exception? Exception;
 
   private void ThrowIfDisposed()
   {
