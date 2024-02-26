@@ -32,7 +32,7 @@ public sealed partial class CompositeBuffer
     {
       lock (Buffer)
       {
-        Buffer.TruncateStart(Position);
+        Buffer.SpliceStart(Position);
         Position = 0;
       }
     }
@@ -73,7 +73,7 @@ public sealed partial class CompositeBuffer
       {
         if (value < Length)
         {
-          Buffer.Truncate(Length - value);
+          Buffer.SpliceEnd(Length - value);
         }
         else if (value > Length)
         {

@@ -101,7 +101,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
     }
   }
 
-  public static CompositeBuffer Empty() => new([], 0);
+  public static CompositeBuffer Empty() => new();
   public static CompositeBuffer Random(int length) => Random(length, System.Random.Shared);
   public static CompositeBuffer Random(int length, Random random)
   {
@@ -113,7 +113,6 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   public static CompositeBuffer Concat(List<CompositeBuffer> buffers)
   {
     List<byte[]> blocks = [];
-    long length = 0;
 
     foreach (CompositeBuffer buffer in buffers)
     {
@@ -122,12 +121,11 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
         foreach (byte[] bufferBlock in buffer.Blocks)
         {
           blocks.Add(bufferBlock);
-          length += bufferBlock.Length;
         }
       }
     }
 
-    return new(blocks, length);
+    return new(blocks);
   }
   public static CompositeBuffer Concat(params CompositeBuffer[] buffers) => Concat(buffers.ToList());
 
@@ -154,22 +152,20 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   public static CompositeBuffer From(Int128 input) => From((UInt128)input);
   public static CompositeBuffer From(UInt128 input) => Concat((ulong)(input & ulong.MaxValue), (ulong)(input >> 64));
 
-  public CompositeBuffer() : this([], 0) { }
-  public CompositeBuffer(byte[] source) : this(source, 0, source.Length) { }
-  public CompositeBuffer(byte[] source, int start, int end) : this(end - start)
-  {
-    Blocks.Add(source);
-  }
-
-  private CompositeBuffer(List<byte[]> blocks, long length) : this(length)
+  private CompositeBuffer(List<byte[]> blocks) : this()
   {
     Blocks.AddRange(blocks);
   }
 
-  private CompositeBuffer(long length)
+  public CompositeBuffer(byte[] source, int start, int end) : this(source[start..end]) { }
+  public CompositeBuffer(byte[] source)
+  {
+    Blocks = [[.. source]];
+  }
+
+  public CompositeBuffer()
   {
     Blocks = [];
-    Length = length;
   }
 
   private List<byte[]> Blocks;
@@ -177,7 +173,9 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   public long BlockCount => Blocks.Count;
   public bool CopyOnWrite = true;
 
-  public long Length { get; private set; }
+  private long? LengthCache;
+
+  public long Length => LengthCache ??= Blocks.Sum((block) => block.LongLength);
 
   public long RealLength
   {
@@ -325,7 +323,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
     }
   }
 
-  public void Write(long position, byte input) => Write(position, new byte[] { input });
+  public void Write(long position, byte input) => Write(position, [input]);
   public long Write(long position, byte[] input) => Write(position, input, 0, input.Length);
   public long Write(long position, byte[] input, int inputOffset, int inputLength)
   {
@@ -380,7 +378,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
           throw new ArgumentOutOfRangeException(nameof(input));
         }
 
-        lock (this)
+        lock (input)
         {
           Blocks = [.. SliceBlocks(0, position), .. input.Blocks, .. SliceBlocks(position + input.Length)];
         }
@@ -432,14 +430,9 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
       {
         return [];
       }
-      else if (start > Length)
-      {
-        throw new ArgumentOutOfRangeException(nameof(start));
-      }
-      else if (end < start)
-      {
-        throw new ArgumentOutOfRangeException(nameof(end));
-      }
+
+      ArgumentOutOfRangeException.ThrowIfGreaterThan(start, Length, nameof(start));
+      ArgumentOutOfRangeException.ThrowIfLessThan(end, start, nameof(end));
 
       List<byte[]> newBlocks = [];
       long remainingOffset = start;
@@ -449,23 +442,22 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
       {
         byte[] block = Blocks[index];
 
-        if (remainingOffset > block.Length)
+        if (remainingOffset >= block.Length)
         {
           remainingOffset -= block.Length;
           continue;
         }
 
-        block = (block.Length - remainingOffset) < remainingLength
-          ? block[..(int)remainingOffset]
-          : block[(int)remainingOffset..(int)(remainingOffset + remainingLength)];
-        remainingOffset = 0;
-
-        if (block.Length != 0)
+        if (remainingOffset > 0)
         {
-          newBlocks.Add(block);
+          block = block[(int)remainingOffset..];
+          remainingOffset = 0;
         }
 
+        block = block[0..(int)long.Min(remainingLength, block.Length)];
         remainingLength -= block.Length;
+
+        newBlocks.Add(block);
       }
 
       return newBlocks;
@@ -473,7 +465,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   }
 
   public CompositeBuffer Slice(long start) => Slice(start, Length);
-  public CompositeBuffer Slice(long start, long end) => new(SliceBlocks(start, end), end - start);
+  public CompositeBuffer Slice(long start, long end) => new(SliceBlocks(start, end));
 
   public CompositeBuffer Repeat(long count)
   {
@@ -571,11 +563,11 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
     }
   }
 
-  public long TruncateStart(byte[] output, int outputOffset, int outputLength) => TruncateStart(outputLength - outputOffset).Read(0, output, outputOffset, outputLength);
-  public long Truncate(byte[] output, int outputOffset, int outputLength) => Truncate(outputLength - outputOffset).Read(0, output, outputOffset, outputLength);
+  public long SpliceStart(byte[] output, int outputOffset, int outputLength) => SpliceStart(outputLength - outputOffset).Read(0, output, outputOffset, outputLength);
+  public long SpliceEnd(byte[] output, int outputOffset, int outputLength) => SpliceEnd(outputLength - outputOffset).Read(0, output, outputOffset, outputLength);
 
-  public CompositeBuffer TruncateStart(long length) => Splice(0, length);
-  public CompositeBuffer Truncate(long length) => Splice(Length - length, Length);
+  public CompositeBuffer SpliceStart(long length) => Splice(0, length);
+  public CompositeBuffer SpliceEnd(long length) => Splice(Length - length, Length);
 
   public long Splice(long start, byte[] output, int outputOffset, int outputLength) => Splice(start, start + outputLength - outputOffset).Read(0, output, outputOffset, outputLength);
 
@@ -655,8 +647,8 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
         }
       }
 
-      Length -= end - start;
-      return new(splicedBuffers, end - start);
+      LengthCache = null;
+      return new(splicedBuffers);
     }
   }
 
@@ -666,7 +658,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
     lock (this)
     {
       Blocks.Add(input[inputOffset..(inputOffset + inputLength)]);
-      Length += inputLength;
+      LengthCache = null;
     }
 
     return inputLength;
@@ -674,9 +666,9 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
 
   public long Append(params CompositeBuffer[] inputs)
   {
+    long length = 0;
     lock (this)
     {
-      long length = 0;
 
       foreach (CompositeBuffer input in inputs)
       {
@@ -687,9 +679,9 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
         }
       }
 
-      Length += length;
-      return length;
+      LengthCache = null;
     }
+    return length;
   }
 
   public long Prepend(byte[] input) => Prepend(input, 0, input.Length);
@@ -698,7 +690,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
     lock (this)
     {
       Blocks.Insert(0, input[inputOffset..(inputOffset + inputLength)]);
-      Length += inputLength;
+      LengthCache = null;
     }
 
     return inputLength;
@@ -706,9 +698,9 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
 
   public long Prepend(params CompositeBuffer[] inputs)
   {
+    long length = 0;
     lock (this)
     {
-      long length = 0;
 
       foreach (CompositeBuffer input in inputs)
       {
@@ -719,9 +711,9 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
         }
       }
 
-      Length += length;
-      return length;
+      LengthCache = null;
     }
+    return length;
   }
 
   public override bool Equals(object? target) => ReferenceEquals(this, target) || Equals(target as CompositeBuffer);
@@ -740,12 +732,9 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
   {
     lock (this)
     {
-      foreach (byte[] block in Blocks)
+      foreach (byte entry in Blocks.SelectMany((block) => block))
       {
-        foreach (byte blockEntry in block)
-        {
-          yield return blockEntry;
-        }
+        yield return entry;
       }
     }
   }
