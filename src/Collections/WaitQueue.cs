@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Collections;
+namespace RizzziGit.Commons.Collections;
 
 public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnumerable<T>
 {

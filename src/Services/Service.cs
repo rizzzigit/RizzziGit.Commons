@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Services;
+namespace RizzziGit.Commons.Services;
 
 using Logging;
 using Tasks;
@@ -48,12 +48,15 @@ public abstract class Service
     }
   }
 
-  public Task Stop()
+  public Task Stop(CancellationToken cancellationToken = default)
   {
     ServiceContext? context = Context;
 
     try { context?.CancellationTokenSource.Cancel(); } catch { }
-    return (context?.Task ?? Task.CompletedTask).ContinueWith((_) => { });
+
+    return (context?.Task ?? Task.CompletedTask)
+      .ContinueWith((_) => { }, CancellationToken.None)
+      .WaitAsync(cancellationToken);
   }
 
   public Task Join() => Context?.Task ?? Task.CompletedTask;

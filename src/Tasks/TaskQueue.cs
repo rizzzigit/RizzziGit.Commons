@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Tasks;
+namespace RizzziGit.Commons.Tasks;
 
 using Collections;
 

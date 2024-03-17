@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Collections.Interfaces;
+namespace RizzziGit.Commons.Collections.Interfaces;
 
 internal interface IGenericDictionary<K, V> : IDictionary<K, V>
 {

@@ -1,6 +1,6 @@
 using System.Collections;
 
-namespace RizzziGit.Framework.Memory;
+namespace RizzziGit.Commons.Memory;
 
 using Extensions.Array;
 

@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Logging;
+namespace RizzziGit.Commons.Logging;
 
 public delegate void LoggerHandler(LogLevel level, string scope, string message, ulong timestamp);
 

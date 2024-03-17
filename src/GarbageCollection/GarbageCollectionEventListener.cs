@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.GarbageCollection;
+namespace RizzziGit.Commons.GarbageCollection;
 
 internal class GarbageCollectionEventListener
 {

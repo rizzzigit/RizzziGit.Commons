@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 
-namespace RizzziGit.Framework.Collections;
+namespace RizzziGit.Commons.Collections;
 
 using Interfaces;
 using GarbageCollection;

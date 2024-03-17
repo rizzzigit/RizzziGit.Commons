@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Net;
+namespace RizzziGit.Commons.Net;
 
 using Memory;
 
@@ -26,7 +26,7 @@ public abstract partial class HybridWebSocket
         }
 
         linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
-        var (responseCode, responsePayload) = await OnRequest(requestCode, requestPayload, linkedCancellationTokenSource.Token);
+        (uint responseCode, CompositeBuffer responsePayload) = await OnRequest(new(requestCode, requestPayload), linkedCancellationTokenSource.Token);
 
         linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
         await SendResponse(id, responseCode, responsePayload);

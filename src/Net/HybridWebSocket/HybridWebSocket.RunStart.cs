@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 
-namespace RizzziGit.Framework.Net;
+namespace RizzziGit.Commons.Net;
 
 using Memory;
 

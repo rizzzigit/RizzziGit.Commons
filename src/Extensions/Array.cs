@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Extensions.Array;
+namespace RizzziGit.Commons.Extensions.Array;
 
 public static class ArrayExtensions
 {

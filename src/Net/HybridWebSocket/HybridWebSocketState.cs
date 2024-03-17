@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Net;
+namespace RizzziGit.Commons.Net;
 
 public enum ConnectionState : byte {
   Closed = HybridWebSocket.STATE_CLOSED,

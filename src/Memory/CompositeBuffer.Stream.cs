@@ -1,4 +1,4 @@
-namespace RizzziGit.Framework.Memory;
+namespace RizzziGit.Commons.Memory;
 
 public sealed partial class CompositeBuffer
 {

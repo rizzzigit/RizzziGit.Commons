@@ -1,6 +1,6 @@
 using System.Collections;
 
-namespace RizzziGit.Framework.Collections;
+namespace RizzziGit.Commons.Collections;
 
 public class WeakList<T> : IList<T>
   where T : class
