@@ -1,7 +1,5 @@
 namespace RizzziGit.Commons.Net;
 
-using Memory;
-
 public abstract partial class HybridWebSocket
 {
   private (Task task, CancellationToken cancellationToken)? Context;
@@ -62,7 +60,7 @@ public abstract partial class HybridWebSocket
     {
       lock (PendingOutgoingRequests)
       {
-        foreach (KeyValuePair<uint, TaskCompletionSource<(uint responseCode, CompositeBuffer responseData)>> PendingOutgoingRequests in PendingOutgoingRequests)
+        foreach (KeyValuePair<uint, TaskCompletionSource<Payload>> PendingOutgoingRequests in PendingOutgoingRequests)
         {
           PendingOutgoingRequests.Value.TrySetException(exception);
         }
@@ -75,7 +73,7 @@ public abstract partial class HybridWebSocket
     {
       lock (PendingOutgoingRequests)
       {
-        foreach (KeyValuePair<uint, TaskCompletionSource<(uint responseCode, CompositeBuffer responseData)>> PendingOutgoingRequests in PendingOutgoingRequests)
+        foreach (KeyValuePair<uint, TaskCompletionSource<Payload>> PendingOutgoingRequests in PendingOutgoingRequests)
         {
           PendingOutgoingRequests.Value.TrySetCanceled();
         }

@@ -6,7 +6,7 @@ public abstract partial class HybridWebSocket
 {
   private readonly Dictionary<uint, CancellationTokenSource> IncomingRequestCancellationTokens = [];
 
-  private async Task HandleRequest(uint id, uint requestCode, CompositeBuffer requestPayload, CancellationToken cancellationToken)
+  private async Task HandleRequest(uint id, Payload payload, CancellationToken cancellationToken)
   {
     cancellationToken.ThrowIfCancellationRequested();
 
@@ -26,7 +26,7 @@ public abstract partial class HybridWebSocket
         }
 
         linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
-        (uint responseCode, CompositeBuffer responsePayload) = await OnRequest(new(requestCode, requestPayload), linkedCancellationTokenSource.Token);
+        (uint responseCode, CompositeBuffer responsePayload) = await OnRequest(payload, linkedCancellationTokenSource.Token);
 
         linkedCancellationTokenSource.Token.ThrowIfCancellationRequested();
         await SendResponse(id, responseCode, responsePayload);

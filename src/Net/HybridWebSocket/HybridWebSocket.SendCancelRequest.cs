@@ -4,7 +4,7 @@ using Memory;
 
 public abstract partial class HybridWebSocket
 {
-  private async void SendCancelRequest(uint id, TaskCompletionSource<(uint responseCode, CompositeBuffer responsePayload)> source)
+  private async void SendCancelRequest(uint id, TaskCompletionSource<Payload> source)
   {
     try
     {

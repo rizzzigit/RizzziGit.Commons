@@ -24,15 +24,15 @@
     <Description>RizzziGit's Common .NET Library.</Description>
     <Product>RizzziGit.Commons</Product>
     <Authors>RizzziGit</Authors>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
 
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
-    <FileVersion>0.0.1</FileVersion>
+    <FileVersion>0.0.2</FileVersion>
     <RepositoryUrl>https://github.com/RizzziGit/RizzziGit.Commons</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageReleaseNotes>Initial release</PackageReleaseNotes>
+    <PackageReleaseNotes>Refactored `HybridWebSocket` request/response typings.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

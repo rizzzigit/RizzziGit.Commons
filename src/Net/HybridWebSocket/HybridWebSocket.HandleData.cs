@@ -18,7 +18,7 @@ public abstract partial class HybridWebSocket
         break;
 
       case DATA_REQUEST:
-        await HandleRequest(data.Slice(1, 5).ToUInt32(), data.Slice(5, 9).ToUInt32(), data.Slice(9), cancellationToken);
+        await HandleRequest(data.Slice(1, 5).ToUInt32(), new(data.Slice(5, 9).ToUInt32(), data.Slice(9)), cancellationToken);
         break;
 
       case DATA_CANCEL_REQUEST:
@@ -26,7 +26,7 @@ public abstract partial class HybridWebSocket
         break;
 
       case DATA_RESPONSE:
-        HandleResponse(data.Slice(1, 5).ToUInt32(), data.Slice(5, 9).ToUInt32(), data.Slice(9));
+        HandleResponse(data.Slice(1, 5).ToUInt32(), new(data.Slice(5, 9).ToUInt32(), data.Slice(9)));
         break;
 
       case DATA_CANCEL_RESPONSE:

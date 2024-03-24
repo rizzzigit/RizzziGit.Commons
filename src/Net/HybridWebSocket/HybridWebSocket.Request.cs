@@ -2,14 +2,12 @@ using System.Collections.Concurrent;
 
 namespace RizzziGit.Commons.Net;
 
-using Memory;
-
 public abstract partial class HybridWebSocket
 {
-  private readonly ConcurrentDictionary<uint, TaskCompletionSource<(uint responseCode, CompositeBuffer responsePayload)>> PendingOutgoingRequests = [];
+  private readonly ConcurrentDictionary<uint, TaskCompletionSource<Payload>> PendingOutgoingRequests = [];
 
   public bool CanRequest => StateInt == STATE_OPEN;
-  public async Task<(uint responseCode, CompositeBuffer responsePayload)> Request(uint requestCode, CompositeBuffer requestPayload, CancellationToken cancellationToken)
+  public async Task<Payload> Request(Payload payload, CancellationToken cancellationToken)
   {
     if (!CanRequest)
     {
@@ -17,7 +15,7 @@ public abstract partial class HybridWebSocket
     }
 
     uint id;
-    TaskCompletionSource<(uint responseCode, CompositeBuffer responsePayload)> source = new();
+    TaskCompletionSource<Payload> source = new();
 
     lock (PendingOutgoingRequests)
     {
@@ -41,7 +39,7 @@ public abstract partial class HybridWebSocket
     try
     {
       cancellationToken.ThrowIfCancellationRequested();
-      await SendRequest(id, requestCode, requestPayload);
+      await SendRequest(id, payload);
       return await source.Task;
     }
     finally

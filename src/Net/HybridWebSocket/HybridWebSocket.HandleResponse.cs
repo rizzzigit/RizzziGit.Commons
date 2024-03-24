@@ -1,14 +1,12 @@
 namespace RizzziGit.Commons.Net;
 
-using Memory;
-
 public abstract partial class HybridWebSocket
 {
-  private void HandleResponse(uint id, uint responseCode, CompositeBuffer responsePayload)
+  private void HandleResponse(uint id, Payload payload)
   {
-    if (PendingOutgoingRequests.Remove(id, out TaskCompletionSource<(uint responseCode, CompositeBuffer responsePayload)>? value))
+    if (PendingOutgoingRequests.Remove(id, out TaskCompletionSource<Payload>? value))
     {
-      value.SetResult((responseCode, responsePayload));
+      value.SetResult(payload);
     }
   }
 }

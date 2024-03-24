@@ -4,13 +4,13 @@ using Memory;
 
 public abstract partial class HybridWebSocket
 {
-  private async Task SendRequest(uint id, uint requestCode, CompositeBuffer requestPayload)
+  private async Task SendRequest(uint id, Payload payload)
   {
     await SendData(CompositeBuffer.Concat(
       CompositeBuffer.From(DATA_REQUEST),
       CompositeBuffer.From(id),
-      CompositeBuffer.From(requestCode),
-      requestPayload
+      CompositeBuffer.From(payload.Code),
+      payload.Buffer
     ));
   }
 }
