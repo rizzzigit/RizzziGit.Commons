@@ -1,6 +1,6 @@
 namespace RizzziGit.Commons.Net;
 
-public enum ConnectionState : byte {
+public enum HybridWebSocketState : byte {
   Closed = HybridWebSocket.STATE_CLOSED,
   Open = HybridWebSocket.STATE_OPEN,
   LocalClosing = HybridWebSocket.STATE_LOCAL_CLOSING,

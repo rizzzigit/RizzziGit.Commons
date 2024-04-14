@@ -12,7 +12,7 @@ public abstract partial class HybridWebSocket
   }
 
   public int StateInt { get; private set; } = STATE_CLOSED;
-  public ConnectionState State => (ConnectionState)Enum.ToObject(typeof(ConnectionState), StateInt);
+  public HybridWebSocketState State => (HybridWebSocketState)Enum.ToObject(typeof(HybridWebSocketState), StateInt);
 
   protected async Task Start(CancellationToken cancellationToken)
   {

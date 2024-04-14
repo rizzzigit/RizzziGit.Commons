@@ -4,7 +4,7 @@ namespace RizzziGit.Commons.Net;
 
 using Memory;
 
-public abstract partial class HybridWebSocket(ConnectionConfig config, WebSocket webSocket) : IDisposable
+public abstract partial class HybridWebSocket(HybridWebSocketConfig config, WebSocket webSocket) : IDisposable
 {
   private const byte DATA_MESSAGE = 0x00;
   private const byte DATA_REQUEST = 0x01;
@@ -16,10 +16,10 @@ public abstract partial class HybridWebSocket(ConnectionConfig config, WebSocket
 
   public sealed record Payload(uint Code, CompositeBuffer Buffer);
 
-  public HybridWebSocket(ConnectionConfig config, Stream stream, bool isServer, string? subProtocol = null, TimeSpan? keepInterval = null) : this(config, WebSocket.CreateFromStream(stream, isServer, subProtocol, keepInterval ?? TimeSpan.Zero)) { }
+  public HybridWebSocket(HybridWebSocketConfig config, Stream stream, bool isServer, string? subProtocol = null, TimeSpan? keepInterval = null) : this(config, WebSocket.CreateFromStream(stream, isServer, subProtocol, keepInterval ?? TimeSpan.Zero)) { }
 
   private readonly WebSocket WebSocket = webSocket;
-  protected readonly ConnectionConfig Config = config;
+  protected readonly HybridWebSocketConfig Config = config;
 
   protected abstract Task OnStart(CancellationToken cancellationToken);
   protected abstract Task<Payload> OnRequest(Payload payload, CancellationToken cancellationToken);
