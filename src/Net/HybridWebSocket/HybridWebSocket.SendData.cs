@@ -16,6 +16,11 @@ public abstract partial class HybridWebSocket
 
     OnSend?.Invoke(data[0]);
 
-    await WebSocket.SendAsync(data.ToByteArray(), WebSocketMessageType.Binary, true, RequireCancellationToken());
+    for (long offset = 0; offset < data.Length; offset += 4096)
+    {
+      await WebSocket.SendAsync(data.Slice(offset, Math.Min(4096, data.Length - offset)).ToByteArray(), WebSocketMessageType.Binary, false, RequireCancellationToken());
+    }
+
+    await WebSocket.SendAsync([], WebSocketMessageType.Binary, true, RequireCancellationToken());
   }
 }
