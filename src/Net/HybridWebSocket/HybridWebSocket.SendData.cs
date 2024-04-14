@@ -18,7 +18,7 @@ public partial class HybridWebSocket
 
     for (long offset = 0; offset < data.Length; offset += 4096)
     {
-      await WebSocket.SendAsync(data.Slice(offset, Math.Min(4096, data.Length - offset)).ToByteArray(), WebSocketMessageType.Binary, false, RequireCancellationToken());
+      await WebSocket.SendAsync(data.Slice(offset, Math.Min(offset + 4096, data.Length)).ToByteArray(), WebSocketMessageType.Binary, false, RequireCancellationToken());
     }
 
     await WebSocket.SendAsync([], WebSocketMessageType.Binary, true, RequireCancellationToken());
