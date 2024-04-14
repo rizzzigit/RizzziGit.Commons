@@ -8,7 +8,7 @@ public enum HybridWebSocketState : byte {
   Aborted = HybridWebSocket.STATE_ABORTED
 }
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   public const byte STATE_CLOSED = 0;
   public const byte STATE_OPEN = 1;

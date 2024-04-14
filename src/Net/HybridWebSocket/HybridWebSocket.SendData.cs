@@ -3,7 +3,7 @@ namespace RizzziGit.Commons.Net;
 using System.Net.WebSockets;
 using Memory;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   public event Action<byte>? OnSend;
 

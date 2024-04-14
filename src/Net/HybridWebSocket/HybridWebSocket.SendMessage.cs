@@ -2,7 +2,7 @@ namespace RizzziGit.Commons.Net;
 
 using Memory;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   private async Task SendMessage(CompositeBuffer message)
   {

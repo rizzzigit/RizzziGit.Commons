@@ -4,7 +4,7 @@ namespace RizzziGit.Commons.Net;
 
 using Memory;
 
-public abstract partial class HybridWebSocket(HybridWebSocketConfig config, WebSocket webSocket) : IDisposable
+public partial class HybridWebSocket(HybridWebSocketConfig config, WebSocket webSocket) : IDisposable
 {
   private const byte DATA_MESSAGE = 0x00;
   private const byte DATA_REQUEST = 0x01;
@@ -21,9 +21,9 @@ public abstract partial class HybridWebSocket(HybridWebSocketConfig config, WebS
   private readonly WebSocket WebSocket = webSocket;
   protected readonly HybridWebSocketConfig Config = config;
 
-  protected abstract Task OnStart(CancellationToken cancellationToken);
-  protected abstract Task<Payload> OnRequest(Payload payload, CancellationToken cancellationToken);
-  protected abstract Task OnMessage(CompositeBuffer message, CancellationToken cancellationToken);
+  protected virtual Task OnStart(CancellationToken cancellationToken) { return Task.CompletedTask; }
+  protected virtual Task<Payload> OnRequest(Payload payload, CancellationToken cancellationToken) { throw new NotImplementedException(); }
+  protected virtual Task OnMessage(CompositeBuffer message, CancellationToken cancellationToken) { return Task.CompletedTask; }
 
   void IDisposable.Dispose() => GC.SuppressFinalize(this);
 }

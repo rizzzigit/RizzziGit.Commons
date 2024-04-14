@@ -2,7 +2,7 @@ namespace RizzziGit.Commons.Net;
 
 using Memory;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   public bool CanMessage => (StateInt == STATE_OPEN) || (StateInt == STATE_REMOTE_CLOSING);
   public async Task Message(CompositeBuffer message)

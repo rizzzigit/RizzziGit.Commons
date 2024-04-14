@@ -1,6 +1,6 @@
 namespace RizzziGit.Commons.Net;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   private void HandleErrorResponse(uint id, string name, string message)
   {

@@ -2,7 +2,7 @@ namespace RizzziGit.Commons.Net;
 
 using Memory;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   private async void SendCancelRequest(uint id, TaskCompletionSource<Payload> source)
   {

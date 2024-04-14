@@ -4,7 +4,7 @@ namespace RizzziGit.Commons.Net;
 
 using Memory;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   private List<Task> PendingDataHandlingTasks = [];
 

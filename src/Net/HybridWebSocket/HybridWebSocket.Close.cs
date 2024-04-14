@@ -1,6 +1,6 @@
 namespace RizzziGit.Commons.Net;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   public async Task Close(CancellationToken cancellationToken = default)
   {

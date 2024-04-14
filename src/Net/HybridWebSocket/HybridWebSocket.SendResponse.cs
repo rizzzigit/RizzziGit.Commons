@@ -2,7 +2,7 @@ namespace RizzziGit.Commons.Net;
 
 using Memory;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   private Task SendResponse(uint id, uint responseCode, CompositeBuffer responsePayload) => SendData(CompositeBuffer.Concat(
     CompositeBuffer.From(DATA_RESPONSE),

@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace RizzziGit.Commons.Net;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   private readonly ConcurrentDictionary<uint, TaskCompletionSource<Payload>> PendingOutgoingRequests = [];
 

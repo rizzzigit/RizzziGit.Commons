@@ -1,6 +1,6 @@
 namespace RizzziGit.Commons.Net;
 
-public abstract partial class HybridWebSocket
+public partial class HybridWebSocket
 {
   private void HandleCancelRequest(uint id, CancellationToken cancellationToken)
   {
