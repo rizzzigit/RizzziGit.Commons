@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -24,15 +24,15 @@
     <Description>RizzziGit's Common .NET Library.</Description>
     <Product>RizzziGit.Commons</Product>
     <Authors>RizzziGit</Authors>
-    <Version>0.0.2</Version>
+    <Version>0.0.3</Version>
 
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
-    <FileVersion>0.0.2</FileVersion>
+    <FileVersion>0.0.3</FileVersion>
     <RepositoryUrl>https://github.com/RizzziGit/RizzziGit.Commons</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageReleaseNotes>Refactored `HybridWebSocket` request/response typings.</PackageReleaseNotes>
+    <PackageReleaseNotes>Refactored `HybridWebSocket` sending data.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
