@@ -12,7 +12,16 @@ public enum ServiceState : byte
   Crashed = 0b001
 }
 
-public abstract class Service
+public interface IService {
+  public Task Start(CancellationToken cancellationToken);
+  public Task Stop(CancellationToken cancellationToken);
+  public Task Join();
+
+  public string Name { get;}
+  public Logger Logger { get; }
+}
+
+public abstract class Service : IService
 {
   private class ServiceContext(Func<ServiceState> getState, Func<Task> getTask, Func<CancellationTokenSource> getCancellationTokenSource)
   {
@@ -223,4 +232,11 @@ public abstract class Service
   protected virtual Task OnStart(CancellationToken cancellationToken) => Task.CompletedTask;
   protected virtual Task OnRun(CancellationToken cancellationToken) => Task.Delay(-1, cancellationToken);
   protected virtual Task OnStop(Exception? exception = null) => Task.CompletedTask;
+
+  Task IService.Start(CancellationToken cancellationToken) => Start(cancellationToken);
+  Task IService.Stop(CancellationToken cancellationToken) => Stop(cancellationToken);
+  Task IService.Join() => Join();
+
+  string IService.Name => Name;
+  Logger IService.Logger => Logger;
 }
