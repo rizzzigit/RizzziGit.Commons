@@ -137,9 +137,84 @@ public abstract class Service2<D> : IService2
             StateChanged?.Invoke(this, state);
         }
 
+        void setLastException(Exception? exception)
+        {
+            lock (this)
+            {
+                lastException = exception;
+            }
+
+            if (exception != null)
+            {
+                ExceptionThrown?.Invoke(this, exception);
+            }
+        }
+
+        async Task runStage1(CancellationToken cancellationToken)
+        {
+            cancellationToken.Register(() => setState(currentState | Service2State.Cancelled));
+
+            setState(Service2State.Running | Service2State.Pending);
+            D data;
+
+            try
+            {
+                data = await runStage2Startup(cancellationToken, startupCancellationToken);
+            }
+            catch (Exception exception)
+            {
+                setState(Service2State.NotRunning | Service2State.Errored);
+
+                setLastException(exception);
+                throw;
+            }
+
+            setState(Service2State.Running);
+
+            try
+            {
+                try
+                {
+                    await runStage2Run(data, cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    setState(
+                        Service2State.NotRunning | Service2State.Errored | Service2State.Pending
+                    );
+
+                    await runStage2Stop(data, exception);
+                    throw;
+                }
+            }
+            catch (Exception exception)
+            {
+                setState(Service2State.NotRunning | Service2State.Errored);
+
+                setLastException(exception);
+                throw;
+            }
+
+            setState(Service2State.NotRunning | Service2State.Pending);
+
+            try
+            {
+                await runStage2Stop(data, null);
+            }
+            catch (Exception exception)
+            {
+                setState(Service2State.NotRunning | Service2State.Errored | Service2State.Pending);
+
+                setLastException(exception);
+                throw;
+            }
+
+            setState(Service2State.NotRunning);
+        }
+
         TaskCompletionSource startupTaskCompletionSource = new();
 
-        async Task<D> runStage3Startup(
+        async Task<D> runStage2Startup(
             CancellationToken cancellationToken,
             CancellationToken startupCancellationToken
         )
@@ -156,13 +231,14 @@ public abstract class Service2<D> : IService2
 
                 return result;
             }
-            catch
+            catch (Exception exception)
             {
+                startupTaskCompletionSource.SetException(exception);
                 throw;
             }
         }
 
-        async Task runStage3Run(D data, CancellationToken cancellationToken)
+        async Task runStage2Run(D data, CancellationToken cancellationToken)
         {
             try
             {
@@ -182,7 +258,7 @@ public abstract class Service2<D> : IService2
             }
         }
 
-        async Task runStage3Stop(D data, Exception? exception)
+        async Task runStage2Stop(D data, Exception? exception)
         {
             try
             {
@@ -199,86 +275,9 @@ public abstract class Service2<D> : IService2
             }
         }
 
-        async Task runStage2(CancellationToken cancellationToken)
-        {
-            cancellationToken.Register(() => setState(currentState | Service2State.Cancelled));
-
-            setState(Service2State.Running | Service2State.Pending);
-            D data;
-
-            try
-            {
-                data = await runStage3Startup(cancellationToken, startupCancellationToken);
-            }
-            catch (Exception exception)
-            {
-                setState(Service2State.NotRunning | Service2State.Errored);
-
-                lastException = exception;
-                throw;
-            }
-
-            setState(Service2State.Running);
-
-            try
-            {
-                try
-                {
-                    await runStage3Run(data, cancellationToken);
-                }
-                catch (Exception exception)
-                {
-                    setState(
-                        Service2State.NotRunning | Service2State.Errored | Service2State.Pending
-                    );
-
-                    await runStage3Stop(data, exception);
-                    throw;
-                }
-            }
-            catch (Exception exception)
-            {
-                setState(Service2State.NotRunning | Service2State.Errored);
-
-                lastException = exception;
-                throw;
-            }
-
-            setState(Service2State.NotRunning | Service2State.Pending);
-
-            try
-            {
-                await runStage3Stop(data, null);
-            }
-            catch (Exception exception)
-            {
-                setState(Service2State.NotRunning | Service2State.Errored | Service2State.Pending);
-
-                lastException = exception;
-                throw;
-            }
-
-            setState(Service2State.NotRunning);
-        }
-
-        async Task runStage1(CancellationToken cancellationToken)
-        {
-            try
-            {
-                await runStage2(cancellationToken);
-            }
-            finally
-            {
-                lock (this)
-                {
-                    serviceInstanceData = null;
-                }
-            }
-        }
-
         lock (this)
         {
-            lastException = null;
+            setLastException(null);
             serviceInstanceData = new(
                 Service2<D>
                     .GetTaskFactory()
@@ -287,11 +286,21 @@ public abstract class Service2<D> : IService2
                         {
                             try
                             {
-                                runStage1(cancellationTokenSource.Token).Wait();
+                                try
+                                {
+                                    runStage1(cancellationTokenSource.Token).Wait();
+                                }
+                                catch (AggregateException exception)
+                                {
+                                    ExceptionDispatchInfo.Throw(exception.GetBaseException());
+                                }
                             }
-                            catch (AggregateException exception)
+                            finally
                             {
-                                ExceptionDispatchInfo.Throw(exception.GetBaseException());
+                                lock (this)
+                                {
+                                    serviceInstanceData = null;
+                                }
                             }
                         },
                         CancellationToken.None
