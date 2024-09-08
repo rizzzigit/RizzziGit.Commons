@@ -32,7 +32,7 @@
     <FileVersion>0.0.4</FileVersion>
     <RepositoryUrl>https://github.com/RizzziGit/RizzziGit.Commons</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageReleaseNotes>Refactored `HybridWebSocket` sending data.</PackageReleaseNotes>
+    <PackageReleaseNotes>Added new `Service2` class</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

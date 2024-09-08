@@ -12,17 +12,12 @@ public class Service2Exception<D>(Service2<D> service) : Exception
 
 public enum Service2State : byte
 {
-    Running = 0b00100,
-    NotRunning = 0b01000,
-    Pending = 0b00010,
-    Errored = 0b00001,
-    Cancelled = 0b10000,
-
-    CancelledWhileRunning = Running | Cancelled,
-    Starting = Running | Pending,
-    Stopping = NotRunning | Pending,
-    Crashing = NotRunning | Pending | Errored,
-    Crashed = NotRunning | Errored
+    NotRunning,
+    StartingUp,
+    Running,
+    ShuttingDown,
+    CrashingDown,
+    Crashed,
 }
 
 public abstract class Service2 : Service2<object>
@@ -33,8 +28,10 @@ public abstract class Service2 : Service2<object>
     protected Service2(string name, Logger? downstream = null)
         : base(name, downstream) { }
 
-    protected abstract Task OnRun(CancellationToken cancellationToken);
-    protected abstract Task OnStop(Exception? exception);
+    protected virtual Task OnRun(CancellationToken cancellationToken) =>
+        Task.Delay(-1, cancellationToken);
+
+    protected virtual Task OnStop(Exception? exception) => Task.CompletedTask;
 
     protected sealed override Task OnRun(object data, CancellationToken cancellationToken) =>
         OnRun(cancellationToken);
@@ -83,8 +80,11 @@ public abstract class Service2<D> : IService2
 
         if (downstream != null)
         {
-            logger.Subscribe(logger);
+            downstream.Subscribe(logger);
         }
+
+        logger.Logged += (level, scope, message, timestamp) =>
+            Logged?.Invoke(level, scope, message, timestamp);
     }
 
     private Exception? lastException;
@@ -95,6 +95,7 @@ public abstract class Service2<D> : IService2
 
     public event EventHandler<Exception>? ExceptionThrown;
     public event EventHandler<Service2State>? StateChanged;
+    public event LoggerHandler? Logged;
 
     public Service2State State => serviceInstanceData?.GetState() ?? Service2State.NotRunning;
 
@@ -119,22 +120,37 @@ public abstract class Service2<D> : IService2
             task = serviceInstanceData?.Task ?? Task.CompletedTask;
         }
 
-        await task.WaitAsync(cancellationToken);
+        try
+        {
+            await task.WaitAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            if (
+                exception is OperationCanceledException operationCanceledException
+                && operationCanceledException.CancellationToken == cancellationToken
+            )
+            {
+                return;
+            }
+        }
     }
 
     public async Task Start(CancellationToken startupCancellationToken = default)
     {
         CancellationTokenSource cancellationTokenSource = new();
-        Service2State currentState = Service2State.Running | Service2State.Pending;
+        Service2State currentState = Service2State.NotRunning;
 
         void setState(Service2State state)
         {
+            Service2State oldState = currentState;
             lock (this)
             {
                 currentState = state;
             }
 
             StateChanged?.Invoke(this, state);
+            logger.Debug($"[State]: {oldState} -> {state}");
         }
 
         void setLastException(Exception? exception)
@@ -152,10 +168,9 @@ public abstract class Service2<D> : IService2
 
         async Task runStage1(CancellationToken cancellationToken)
         {
-            cancellationToken.Register(() => setState(currentState | Service2State.Cancelled));
-
-            setState(Service2State.Running | Service2State.Pending);
             D data;
+
+            setState(Service2State.StartingUp);
 
             try
             {
@@ -163,9 +178,9 @@ public abstract class Service2<D> : IService2
             }
             catch (Exception exception)
             {
-                setState(Service2State.NotRunning | Service2State.Errored);
-
+                setState(Service2State.CrashingDown);
                 setLastException(exception);
+                setState(Service2State.Crashed);
                 throw;
             }
 
@@ -173,29 +188,27 @@ public abstract class Service2<D> : IService2
 
             try
             {
-                try
-                {
-                    await runStage2Run(data, cancellationToken);
-                }
-                catch (Exception exception)
-                {
-                    setState(
-                        Service2State.NotRunning | Service2State.Errored | Service2State.Pending
-                    );
-
-                    await runStage2Stop(data, exception);
-                    throw;
-                }
+                await runStage2Run(data, cancellationToken);
             }
             catch (Exception exception)
             {
-                setState(Service2State.NotRunning | Service2State.Errored);
+                setState(Service2State.CrashingDown);
 
-                setLastException(exception);
+                try
+                {
+                    await runStage2Stop(data, exception);
+                }
+                catch (Exception stopException)
+                {
+                    setState(Service2State.Crashed);
+                    throw new AggregateException(exception, stopException);
+                }
+
+                setState(Service2State.Crashed);
                 throw;
             }
 
-            setState(Service2State.NotRunning | Service2State.Pending);
+            setState(Service2State.ShuttingDown);
 
             try
             {
@@ -203,7 +216,7 @@ public abstract class Service2<D> : IService2
             }
             catch (Exception exception)
             {
-                setState(Service2State.NotRunning | Service2State.Errored | Service2State.Pending);
+                setState(Service2State.CrashingDown);
 
                 setLastException(exception);
                 throw;
@@ -321,7 +334,13 @@ public abstract class Service2<D> : IService2
         {
             serviceInstanceData = this.serviceInstanceData;
 
-            if (serviceInstanceData == null || serviceInstanceData.State != Service2State.Running)
+            if (
+                serviceInstanceData == null
+                || !(
+                    serviceInstanceData.State == Service2State.Running
+                    || serviceInstanceData.State == Service2State.StartingUp
+                )
+            )
             {
                 return;
             }
