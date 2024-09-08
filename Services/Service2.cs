@@ -166,6 +166,8 @@ public abstract class Service2<D> : IService2
             }
         }
 
+        TaskCompletionSource startupTaskCompletionSource = new();
+
         async Task runStage1(CancellationToken cancellationToken)
         {
             D data;
@@ -185,6 +187,7 @@ public abstract class Service2<D> : IService2
             }
 
             setState(Service2State.Running);
+            startupTaskCompletionSource.SetResult();
 
             try
             {
@@ -225,8 +228,6 @@ public abstract class Service2<D> : IService2
             setState(Service2State.NotRunning);
         }
 
-        TaskCompletionSource startupTaskCompletionSource = new();
-
         async Task<D> runStage2Startup(
             CancellationToken cancellationToken,
             CancellationToken startupCancellationToken
@@ -239,10 +240,7 @@ public abstract class Service2<D> : IService2
                 );
             try
             {
-                D result = await OnStart(startupLinkedCancellationTokenSource.Token);
-                startupTaskCompletionSource.SetResult();
-
-                return result;
+                return await OnStart(startupLinkedCancellationTokenSource.Token);
             }
             catch (Exception exception)
             {
