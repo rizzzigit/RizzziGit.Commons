@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using System.Runtime.CompilerServices;
 
 namespace RizzziGit.Commons.Services;
 
@@ -51,7 +52,7 @@ public abstract class Service2 : Service2<object>
 }
 
 public abstract class Service2<D> : IService2
-    where D : class
+    where D : notnull
 {
     private static TaskFactory? taskFactory;
 
@@ -64,11 +65,9 @@ public abstract class Service2<D> : IService2
     private sealed record ServiceInstanceData(
         Task Task,
         CancellationTokenSource CancellationTokenSource,
-        Func<Service2State> GetState
-    )
-    {
-        public Service2State State => GetState();
-    }
+        Func<Service2State> GetState,
+        Func<StrongBox<D>?> GetData
+    ) { }
 
     public Service2(string name, IService2 downstream)
         : this(name, downstream.Logger) { }
@@ -98,6 +97,11 @@ public abstract class Service2<D> : IService2
     public event LoggerHandler? Logged;
 
     public Service2State State => serviceInstanceData?.GetState() ?? Service2State.NotRunning;
+    protected D Data =>
+        (
+            serviceInstanceData?.GetData()
+            ?? throw new InvalidOperationException("Data is not yet initialized")
+        ).Value!;
 
     protected abstract Task<D> OnStart(CancellationToken cancellationToken);
 
@@ -140,48 +144,29 @@ public abstract class Service2<D> : IService2
     {
         CancellationTokenSource cancellationTokenSource = new();
         Service2State currentState = Service2State.NotRunning;
+        StrongBox<D>? currentData = null;
 
         void setState(Service2State state)
         {
-            Service2State oldState = currentState;
-            lock (this)
-            {
-                currentState = state;
-            }
-
+            logger.Debug($"[State]: {currentState} -> {currentState = state}");
             StateChanged?.Invoke(this, state);
-            logger.Debug($"[State]: {oldState} -> {state}");
-        }
-
-        void setLastException(Exception? exception)
-        {
-            lock (this)
-            {
-                lastException = exception;
-            }
-
-            if (exception != null)
-            {
-                ExceptionThrown?.Invoke(this, exception);
-            }
         }
 
         TaskCompletionSource startupTaskCompletionSource = new();
 
         async Task runStage1(CancellationToken cancellationToken)
         {
-            D data;
-
             setState(Service2State.StartingUp);
 
             try
             {
-                data = await runStage2Startup(cancellationToken, startupCancellationToken);
+                currentData = new(
+                    await runStage2Startup(cancellationToken, startupCancellationToken)
+                );
             }
-            catch (Exception exception)
+            catch
             {
                 setState(Service2State.CrashingDown);
-                setLastException(exception);
                 setState(Service2State.Crashed);
                 throw;
             }
@@ -191,7 +176,7 @@ public abstract class Service2<D> : IService2
 
             try
             {
-                await runStage2Run(data, cancellationToken);
+                await runStage2Run(currentData!.Value!, cancellationToken);
             }
             catch (Exception exception)
             {
@@ -199,7 +184,7 @@ public abstract class Service2<D> : IService2
 
                 try
                 {
-                    await runStage2Stop(data, exception);
+                    await runStage2Stop(currentData!.Value!, exception);
                 }
                 catch (Exception stopException)
                 {
@@ -215,13 +200,12 @@ public abstract class Service2<D> : IService2
 
             try
             {
-                await runStage2Stop(data, null);
+                await runStage2Stop(currentData!.Value!, null);
             }
-            catch (Exception exception)
+            catch
             {
                 setState(Service2State.CrashingDown);
-
-                setLastException(exception);
+                setState(Service2State.Crashed);
                 throw;
             }
 
@@ -288,7 +272,7 @@ public abstract class Service2<D> : IService2
 
         lock (this)
         {
-            setLastException(null);
+            lastException = null;
             serviceInstanceData = new(
                 Service2<D>
                     .GetTaskFactory()
@@ -301,9 +285,16 @@ public abstract class Service2<D> : IService2
                                 {
                                     runStage1(cancellationTokenSource.Token).Wait();
                                 }
-                                catch (AggregateException exception)
+                                catch (AggregateException aggregateException)
                                 {
-                                    ExceptionDispatchInfo.Throw(exception.GetBaseException());
+                                    Exception exception = aggregateException.GetBaseException();
+
+                                    lock (this)
+                                    {
+                                        lastException = exception;
+                                    }
+
+                                    ExceptionDispatchInfo.Throw(exception);
                                 }
                             }
                             finally
@@ -317,7 +308,8 @@ public abstract class Service2<D> : IService2
                         CancellationToken.None
                     ),
                 cancellationTokenSource,
-                () => currentState
+                () => currentState,
+                () => currentData
             );
         }
 
@@ -332,15 +324,18 @@ public abstract class Service2<D> : IService2
         {
             serviceInstanceData = this.serviceInstanceData;
 
-            if (
-                serviceInstanceData == null
-                || !(
-                    serviceInstanceData.State == Service2State.Running
-                    || serviceInstanceData.State == Service2State.StartingUp
-                )
-            )
+            if (serviceInstanceData == null)
             {
                 return;
+            }
+            else
+            {
+                Service2State state = serviceInstanceData.GetState();
+
+                if (!(state == Service2State.Running || state == Service2State.StartingUp))
+                {
+                    return;
+                }
             }
 
             try
