@@ -1,5 +1,5 @@
-using System.Runtime.ExceptionServices;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 
 namespace RizzziGit.Commons.Services;
 
@@ -137,6 +137,8 @@ public abstract class Service2<D> : IService2
             {
                 return;
             }
+
+            throw;
         }
     }
 
@@ -292,6 +294,7 @@ public abstract class Service2<D> : IService2
                                     lock (this)
                                     {
                                         lastException = exception;
+                                        ExceptionThrown?.Invoke(this, exception);
                                     }
 
                                     ExceptionDispatchInfo.Throw(exception);
