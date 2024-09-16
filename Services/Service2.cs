@@ -96,6 +96,18 @@ public abstract class Service2<D> : IService2
     public event EventHandler<Service2State>? StateChanged;
     public event LoggerHandler? Logged;
 
+    protected void Log(LogLevel level, string message) => logger.Log(level, message);
+
+    public void Debug(string message) => Log(LogLevel.Debug, message);
+
+    public void Info(string message) => Log(LogLevel.Info, message);
+
+    public void Warn(string message) => Log(LogLevel.Warn, message);
+
+    public void Error(string message) => Log(LogLevel.Error, message);
+
+    public void Fatal(string message) => Log(LogLevel.Fatal, message);
+
     public Service2State State => serviceInstanceData?.GetState() ?? Service2State.NotRunning;
     protected D Data =>
         (
