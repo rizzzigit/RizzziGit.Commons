@@ -154,7 +154,7 @@ public abstract class Service2<D> : IService2
         }
     }
 
-    public async Task Start(CancellationToken startupCancellationToken = default)
+    protected async Task Start(CancellationToken startupCancellationToken = default)
     {
         CancellationTokenSource cancellationTokenSource = new();
         Service2State currentState = Service2State.NotRunning;
