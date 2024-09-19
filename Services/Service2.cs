@@ -151,7 +151,7 @@ public abstract class Service2<D> : IService2
             Logged?.Invoke(level, scope, message, timestamp);
     }
 
-    private Exception? lastException;
+    private ExceptionDispatchInfo? lastException;
     private ServiceInstanceData? serviceInstanceData;
     private readonly Logger logger;
 
@@ -194,7 +194,7 @@ public abstract class Service2<D> : IService2
     {
         if (lastException != null)
         {
-            ExceptionDispatchInfo.Throw(lastException);
+            lastException.Throw();
         }
 
         Task task;
@@ -369,15 +369,17 @@ public abstract class Service2<D> : IService2
                                 }
                                 catch (AggregateException aggregateException)
                                 {
-                                    Exception exception = aggregateException.GetBaseException();
+                                    ExceptionDispatchInfo exception = ExceptionDispatchInfo.Capture(
+                                        aggregateException.GetBaseException()
+                                    );
 
                                     lock (this)
                                     {
                                         lastException = exception;
-                                        ExceptionThrown?.Invoke(this, exception);
+                                        ExceptionThrown?.Invoke(this, exception.SourceException);
                                     }
 
-                                    ExceptionDispatchInfo.Throw(exception);
+                                    exception.Throw();
                                 }
                             }
                             finally
