@@ -54,6 +54,71 @@ public abstract class Service2 : Service2<object>
 public abstract class Service2<D> : IService2
     where D : notnull
 {
+    public static async Task StartServices(params IService2[] services)
+    {
+        List<IService2> startedServices = [];
+        try
+        {
+            foreach (IService2 service in services)
+            {
+                await service.Start();
+
+                startedServices.Add(service);
+            }
+        }
+        catch (Exception exception)
+        {
+            List<ExceptionDispatchInfo> stopExceptions = [];
+
+            foreach (IService2 service in services)
+            {
+                try
+                {
+                    await service.Stop();
+                }
+                catch (Exception stopException)
+                {
+                    stopExceptions.Add(ExceptionDispatchInfo.Capture(stopException));
+                }
+            }
+
+            if (stopExceptions.Count == 0)
+            {
+                throw;
+            }
+
+            throw new AggregateException(
+                [exception, .. stopExceptions.Select((exception) => exception.SourceException)]
+            );
+        }
+    }
+
+    public static async Task StopServices(params IService2[] services)
+    {
+        List<ExceptionDispatchInfo> stopExceptions = [];
+
+        foreach (IService2 service in services)
+        {
+            try
+            {
+                await service.Stop();
+            }
+            catch (Exception exception)
+            {
+                stopExceptions.Add(ExceptionDispatchInfo.Capture(exception));
+            }
+        }
+
+        if (stopExceptions.Count == 0)
+        {
+            return;
+        }
+
+        throw new AggregateException(
+            [.. stopExceptions.Select((exception) => exception.SourceException)]
+        );
+    }
+
     private static TaskFactory? taskFactory;
 
     private static TaskFactory GetTaskFactory() =>
