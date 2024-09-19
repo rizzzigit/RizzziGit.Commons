@@ -141,11 +141,8 @@ public abstract class Service2<D> : IService2
     {
         Name = name;
         logger = new(name);
-        messageLogger = new("Message");
-        stateLogger = new("State");
 
         downstream?.Subscribe(logger);
-        logger.Subscribe(messageLogger, stateLogger);
 
         logger.Logged += (level, scope, message, timestamp) =>
             Logged?.Invoke(level, scope, message, timestamp);
@@ -155,26 +152,24 @@ public abstract class Service2<D> : IService2
     private ServiceInstanceData? serviceInstanceData;
     private readonly Logger logger;
 
-    private readonly Logger messageLogger;
-    private readonly Logger stateLogger;
-
     public readonly string Name;
 
     public event EventHandler<Exception>? ExceptionThrown;
     public event EventHandler<Service2State>? StateChanged;
     public event LoggerHandler? Logged;
 
-    protected void Log(LogLevel level, string message) => messageLogger.Log(level, message);
+    protected void Log(LogLevel level, string scope, string message) =>
+        logger.Log(level, $"[{scope}] {message}");
 
-    public void Debug(string message) => Log(LogLevel.Debug, message);
+    public void Debug(string scope, string message) => Log(LogLevel.Debug, scope, message);
 
-    public void Info(string message) => Log(LogLevel.Info, message);
+    public void Info(string scope, string message) => Log(LogLevel.Info, scope, message);
 
-    public void Warn(string message) => Log(LogLevel.Warn, message);
+    public void Warn(string scope, string message) => Log(LogLevel.Warn, scope, message);
 
-    public void Error(string message) => Log(LogLevel.Error, message);
+    public void Error(string scope, string message) => Log(LogLevel.Error, scope, message);
 
-    public void Fatal(string message) => Log(LogLevel.Fatal, message);
+    public void Fatal(string scope, string message) => Log(LogLevel.Fatal, scope, message);
 
     public Service2State State => serviceInstanceData?.GetState() ?? Service2State.NotRunning;
     protected D Data =>
@@ -230,7 +225,7 @@ public abstract class Service2<D> : IService2
 
         void setState(Service2State state)
         {
-            stateLogger.Debug($"{currentState} -> {currentState = state}");
+            Debug("State Update", $"{currentState} -> {currentState = state}");
             StateChanged?.Invoke(this, state);
         }
 
@@ -376,6 +371,10 @@ public abstract class Service2<D> : IService2
                                     lock (this)
                                     {
                                         lastException = exception;
+                                        Fatal(
+                                            "Fatal Error",
+                                            $"{exception.SourceException.Message}{(exception.SourceException.StackTrace != null ? $" {exception.SourceException.StackTrace}" : "")}"
+                                        );
                                         ExceptionThrown?.Invoke(this, exception.SourceException);
                                     }
 
