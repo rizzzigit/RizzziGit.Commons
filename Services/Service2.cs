@@ -54,14 +54,17 @@ public abstract class Service2 : Service2<object>
 public abstract class Service2<D> : IService2
     where D : notnull
 {
-    public static async Task StartServices(params IService2[] services)
+    public static async Task StartServices(
+        IService2[] services,
+        CancellationToken cancellationToken = default
+    )
     {
         List<IService2> startedServices = [];
         try
         {
             foreach (IService2 service in services)
             {
-                await service.Start();
+                await service.Start(cancellationToken);
 
                 startedServices.Add(service);
             }
