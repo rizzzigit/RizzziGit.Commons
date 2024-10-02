@@ -164,15 +164,15 @@ public abstract class Service2<D> : IService2
     protected void Log(LogLevel level, string scope, string message) =>
         logger.Log(level, $"[{scope}] {message}");
 
-    public void Debug(string scope, string message) => Log(LogLevel.Debug, scope, message);
+    protected void Debug(string scope, string message) => Log(LogLevel.Debug, scope, message);
 
-    public void Info(string scope, string message) => Log(LogLevel.Info, scope, message);
+    protected void Info(string scope, string message) => Log(LogLevel.Info, scope, message);
 
-    public void Warn(string scope, string message) => Log(LogLevel.Warn, scope, message);
+    protected void Warn(string scope, string message) => Log(LogLevel.Warn, scope, message);
 
-    public void Error(string scope, string message) => Log(LogLevel.Error, scope, message);
+    protected void Error(string scope, string message) => Log(LogLevel.Error, scope, message);
 
-    public void Fatal(string scope, string message) => Log(LogLevel.Fatal, scope, message);
+    protected void Fatal(string scope, string message) => Log(LogLevel.Fatal, scope, message);
 
     public Service2State State => serviceInstanceData?.GetState() ?? Service2State.NotRunning;
     protected D Data =>
