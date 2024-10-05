@@ -1,194 +1,199 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 
 namespace RizzziGit.Commons.Collections;
 
-using Interfaces;
 using GarbageCollection;
+using Interfaces;
 
 public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
-  where K : class
+    where K : class
 {
-  public WeakKeyDictionary()
-  {
-    Dictionary = [];
-
-    GarbageCollectionEventListener.Register(CheckAllItems);
-  }
-
-  ~WeakKeyDictionary()
-  {
-    GarbageCollectionEventListener.Unregister(CheckAllItems);
-  }
-
-  private readonly Dictionary<WeakReference<K>, V> Dictionary;
-
-  public int Count
-  {
-    get
+    public WeakKeyDictionary()
     {
-      lock (this)
-      {
-        return Dictionary.Count;
-      }
+        Dictionary = [];
+
+        GarbageCollectionEventListener.Register(CheckAllItems);
     }
-  }
 
-  public ICollection<K> Keys => throw new NotImplementedException();
-  public ICollection<V> Values => throw new NotImplementedException();
-
-  public bool IsReadOnly => false;
-
-  public V this[K key]
-  {
-    get => TryGetValue(key, out V? target) ? target : throw new KeyNotFoundException();
-    set => AddOrUpdate(key, value);
-  }
-
-  public event EventHandler<V>? Finalized;
-
-  private void CheckAllItems()
-  {
-    lock (this)
+    ~WeakKeyDictionary()
     {
-      for (int index = 0; index < Dictionary.Count; index++)
-      {
-        var (key, value) = Dictionary.ElementAt(index);
-        if (!key.TryGetTarget(out K? _) && Dictionary.Remove(key))
+        GarbageCollectionEventListener.Unregister(CheckAllItems);
+    }
+
+    private readonly Dictionary<WeakReference<K>, V> Dictionary;
+
+    public int Count
+    {
+        get
         {
-          Finalized?.Invoke(this, value);
-
-          index--;
+            lock (this)
+            {
+                return Dictionary.Count;
+            }
         }
-      }
     }
-  }
 
-  public void Add(K key, V value)
-  {
-    if (!TryAdd(key, value))
+    public ICollection<K> Keys => throw new NotImplementedException();
+    public ICollection<V> Values => throw new NotImplementedException();
+
+    public bool IsReadOnly => false;
+
+    public V this[K key]
     {
-      throw new ArgumentException("Key already exists.");
+        get => TryGetValue(key, out V? target) ? target : throw new KeyNotFoundException();
+        set => AddOrUpdate(key, value);
     }
-  }
 
-  public bool TryAdd(K key, V value)
-  {
-    lock (this)
+    public event EventHandler<V>? Finalized;
+
+    private void CheckAllItems()
     {
-      foreach (var lookup in Dictionary)
-      {
-        if (lookup.Key.TryGetTarget(out K? target) && target == key)
+        lock (this)
         {
-          return false;
+            for (int index = 0; index < Dictionary.Count; index++)
+            {
+                var (key, value) = Dictionary.ElementAt(index);
+                if (!key.TryGetTarget(out K? _) && Dictionary.Remove(key))
+                {
+                    Finalized?.Invoke(this, value);
+
+                    index--;
+                }
+            }
         }
-      }
-
-      Dictionary.Add(new(key), value);
-      return true;
     }
-  }
 
-  public void AddOrUpdate(K key, V value)
-  {
-    lock (this)
+    public void Add(K key, V value)
     {
-      foreach (var lookup in Dictionary)
-      {
-        if (lookup.Key.TryGetTarget(out K? target) && target == key)
+        if (!TryAdd(key, value))
         {
-          Dictionary.Remove(lookup.Key);
-          Dictionary.Add(new(key), value);
-          return;
+            throw new ArgumentException("Key already exists.");
         }
-      }
-
-      Dictionary.Add(new(key), value);
     }
-  }
 
-  public void Clear()
-  {
-    lock (this)
+    public bool TryAdd(K key, V value)
     {
-      Dictionary.Clear();
-    }
-  }
-
-  public bool Remove(K key)
-  {
-    lock (this)
-    {
-      foreach (var lookup in Dictionary)
-      {
-        if (lookup.Key.TryGetTarget(out K? target) && target == key)
+        lock (this)
         {
-          Dictionary.Remove(lookup.Key);
-          return true;
+            foreach (var lookup in Dictionary)
+            {
+                if (lookup.Key.TryGetTarget(out K? target) && target == key)
+                {
+                    return false;
+                }
+            }
+
+            Dictionary.Add(new(key), value);
+            return true;
         }
-      }
-
-      return false;
     }
-  }
 
-  public bool TryGetValue(K key, [MaybeNullWhen(false)] out V value)
-  {
-    lock (this)
+    public void AddOrUpdate(K key, V value)
     {
-      foreach (var lookup in Dictionary)
-      {
-        if (lookup.Key.TryGetTarget(out K? target) && target == key)
+        lock (this)
         {
-          value = lookup.Value;
-          return true;
+            foreach (var lookup in Dictionary)
+            {
+                if (lookup.Key.TryGetTarget(out K? target) && target == key)
+                {
+                    Dictionary.Remove(lookup.Key);
+                    Dictionary.Add(new(key), value);
+                    return;
+                }
+            }
+
+            Dictionary.Add(new(key), value);
         }
-      }
-
-      value = default;
-      return false;
     }
-  }
 
-  IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-  public IEnumerator<KeyValuePair<K, V>> GetEnumerator()
-  {
-    lock (this)
+    public void Clear()
     {
-      foreach (var (key, value) in Dictionary)
-      {
-        if (key.TryGetTarget(out K? target))
+        lock (this)
         {
-          yield return new(target, value);
+            Dictionary.Clear();
         }
-      }
     }
-  }
 
-  public bool ContainsKey(K key)
-  {
-    lock (this)
+    public bool Remove(K key)
     {
-      foreach (var lookup in Dictionary)
-      {
-        if (lookup.Key.TryGetTarget(out K? target) && target == key)
+        lock (this)
         {
-          return true;
+            foreach (var lookup in Dictionary)
+            {
+                if (lookup.Key.TryGetTarget(out K? target) && target == key)
+                {
+                    Dictionary.Remove(lookup.Key);
+                    return true;
+                }
+            }
+
+            return false;
         }
-      }
-
-      return false;
     }
-  }
 
-  public void Add(KeyValuePair<K, V> item) => Add(item.Key, item.Value);
-  public bool Contains(KeyValuePair<K, V> item) => TryGetValue(item.Key, out V? value) && Equals(value, item.Value);
-  public bool Remove(KeyValuePair<K, V> item) => Remove(item.Key);
-  public void CopyTo(KeyValuePair<K, V>[] array, int arrayIndex)
-  {
-    foreach (KeyValuePair<K, V> entry in array)
+    public bool TryGetValue(K key, [MaybeNullWhen(false)] out V value)
     {
-      Add(entry);
+        lock (this)
+        {
+            foreach (var lookup in Dictionary)
+            {
+                if (lookup.Key.TryGetTarget(out K? target) && target == key)
+                {
+                    value = lookup.Value;
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
     }
-  }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public IEnumerator<KeyValuePair<K, V>> GetEnumerator()
+    {
+        lock (this)
+        {
+            foreach (var (key, value) in Dictionary)
+            {
+                if (key.TryGetTarget(out K? target))
+                {
+                    yield return new(target, value);
+                }
+            }
+        }
+    }
+
+    public bool ContainsKey(K key)
+    {
+        lock (this)
+        {
+            foreach (var lookup in Dictionary)
+            {
+                if (lookup.Key.TryGetTarget(out K? target) && target == key)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    public void Add(KeyValuePair<K, V> item) => Add(item.Key, item.Value);
+
+    public bool Contains(KeyValuePair<K, V> item) =>
+        TryGetValue(item.Key, out V? value) && Equals(value, item.Value);
+
+    public bool Remove(KeyValuePair<K, V> item) => Remove(item.Key);
+
+    public void CopyTo(KeyValuePair<K, V>[] array, int arrayIndex)
+    {
+        foreach (KeyValuePair<K, V> entry in array)
+        {
+            Add(entry);
+        }
+    }
 }

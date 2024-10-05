@@ -1,21 +1,26 @@
-namespace RizzziGit.Commons.Net;
+namespace RizzziGit.Commons.Net.HybridWebSocket;
 
 using Memory;
 
 public partial class HybridWebSocket
 {
-  private async Task SendClose(bool isAbrupt)
-  {
-    if ((StateInt == STATE_LOCAL_CLOSING) || (StateInt != STATE_OPEN && StateInt != STATE_REMOTE_CLOSING))
+    private async Task SendClose(bool isAbrupt)
     {
-      return;
+        if (
+            (StateInt == STATE_LOCAL_CLOSING)
+            || (StateInt != STATE_OPEN && StateInt != STATE_REMOTE_CLOSING)
+        )
+        {
+            return;
+        }
+
+        await SendData(
+            CompositeBuffer.Concat(
+                CompositeBuffer.From(DATA_CLOSE),
+                CompositeBuffer.From((byte)(isAbrupt ? 0x01 : 0x00))
+            )
+        );
+
+        StateInt = StateInt == STATE_REMOTE_CLOSING ? STATE_CLOSED : STATE_LOCAL_CLOSING;
     }
-
-    await SendData(CompositeBuffer.Concat(
-      CompositeBuffer.From(DATA_CLOSE),
-      CompositeBuffer.From((byte)(isAbrupt ? 0x01 : 0x00))
-    ));
-
-    StateInt = StateInt == STATE_REMOTE_CLOSING ? STATE_CLOSED : STATE_LOCAL_CLOSING;
-  }
 }

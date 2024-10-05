@@ -3,163 +3,166 @@ using System.Collections;
 namespace RizzziGit.Commons.Collections;
 
 public class WeakList<T> : IList<T>
-  where T : class
+    where T : class
 {
-  public WeakList(params T[] values)
-  {
-    List = values.Select((e) => new WeakReference<T>(e)).ToList();
-  }
-
-  public WeakList()
-  {
-    List = [];
-  }
-
-  private readonly List<WeakReference<T>> List;
-
-  public T this[int index]
-  {
-    get
+    public WeakList(params T[] values)
     {
+        List = values.Select((e) => new WeakReference<T>(e)).ToList();
+    }
+
+    public WeakList()
+    {
+        List = [];
+    }
+
+    private readonly List<WeakReference<T>> List;
+
+    public T this[int index]
+    {
+        get
+        {
 #nullable disable
-      List[index].TryGetTarget(out T target);
-      return target;
+            List[index].TryGetTarget(out T target);
+            return target;
 #nullable enable
-    }
-
-    set => List[index] = new(value);
-  }
-
-  public int Count => List.Count;
-
-  public bool IsReadOnly => false;
-
-  public void Purge()
-  {
-    lock (this)
-    {
-      for (int index = 0; index < List.Count; index++)
-      {
-        if (!List[index].TryGetTarget(out T? _))
-        {
-          List.RemoveAt(index--);
         }
-      }
+        set => List[index] = new(value);
     }
-  }
 
-  public int IndexOf(T? item)
-  {
-    lock (this)
+    public int Count => List.Count;
+
+    public bool IsReadOnly => false;
+
+    public void Purge()
     {
-      for (int index = 0; index < List.Count; index++)
-      {
-        if (List[index].TryGetTarget(out T? _))
+        lock (this)
         {
-          return index;
+            for (int index = 0; index < List.Count; index++)
+            {
+                if (!List[index].TryGetTarget(out T? _))
+                {
+                    List.RemoveAt(index--);
+                }
+            }
         }
-      }
-
-      return -1;
     }
-  }
 
-  public void Insert(int index, T item)
-  {
-    lock (this)
+    public int IndexOf(T? item)
     {
-      List.Insert(index, new(item));
-    }
-  }
-
-  public void RemoveAt(int index)
-  {
-    lock (this)
-    {
-      List.RemoveAt(index);
-    }
-  }
-
-  public void Add(T item)
-  {
-    lock (this)
-    {
-      List.Add(new(item));
-    }
-  }
-
-  public void Clear()
-  {
-    lock (this)
-    {
-      List.Clear();
-    }
-  }
-
-  public bool Contains(T item)
-  {
-    lock (this)
-    {
-      for (int index = 0; index < List.Count; index++)
-      {
-        if (List[index].TryGetTarget(out T? _))
+        lock (this)
         {
-          return true;
+            for (int index = 0; index < List.Count; index++)
+            {
+                if (List[index].TryGetTarget(out T? _))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
         }
-      }
-
-      return false;
     }
-  }
 
-  public void CopyTo(T[] array, int arrayIndex)
-  {
-    lock (this)
+    public void Insert(int index, T item)
     {
-      if ((arrayIndex > array.Length) || (arrayIndex < 0) || (array.Length - arrayIndex) < Count)
-      {
-        throw new ArgumentOutOfRangeException(nameof(arrayIndex));
-      }
+        lock (this)
+        {
+            List.Insert(index, new(item));
+        }
+    }
 
-      for (int index = arrayIndex; index < array.Length; index++)
-      {
+    public void RemoveAt(int index)
+    {
+        lock (this)
+        {
+            List.RemoveAt(index);
+        }
+    }
+
+    public void Add(T item)
+    {
+        lock (this)
+        {
+            List.Add(new(item));
+        }
+    }
+
+    public void Clear()
+    {
+        lock (this)
+        {
+            List.Clear();
+        }
+    }
+
+    public bool Contains(T item)
+    {
+        lock (this)
+        {
+            for (int index = 0; index < List.Count; index++)
+            {
+                if (List[index].TryGetTarget(out T? _))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    public void CopyTo(T[] array, int arrayIndex)
+    {
+        lock (this)
+        {
+            if (
+                (arrayIndex > array.Length)
+                || (arrayIndex < 0)
+                || (array.Length - arrayIndex) < Count
+            )
+            {
+                throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+            }
+
+            for (int index = arrayIndex; index < array.Length; index++)
+            {
 #nullable disable
-        array[index] = List[index].TryGetTarget(out T target) ? target : null;
+                array[index] = List[index].TryGetTarget(out T target) ? target : null;
 #nullable enable
-      }
-    }
-  }
-
-  public bool Remove(T item)
-  {
-    lock (this)
-    {
-      for (int index = 0; index < List.Count; index++)
-      {
-        if (List[index].TryGetTarget(out T? target) && (target == item))
-        {
-          List.RemoveAt(index--);
-          return true;
+            }
         }
-      }
-
-      return false;
     }
-  }
 
-  public IEnumerator<T> GetEnumerator()
-  {
-    lock (this)
+    public bool Remove(T item)
     {
-      for (int index = 0; index < List.Count; index++)
-      {
-        if (List[index].TryGetTarget(out T? target))
+        lock (this)
         {
-          yield return target;
-        }
-      }
-    }
-  }
+            for (int index = 0; index < List.Count; index++)
+            {
+                if (List[index].TryGetTarget(out T? target) && (target == item))
+                {
+                    List.RemoveAt(index--);
+                    return true;
+                }
+            }
 
-  IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            return false;
+        }
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        lock (this)
+        {
+            for (int index = 0; index < List.Count; index++)
+            {
+                if (List[index].TryGetTarget(out T? target))
+                {
+                    yield return target;
+                }
+            }
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

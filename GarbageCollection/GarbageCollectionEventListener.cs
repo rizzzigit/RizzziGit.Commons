@@ -2,67 +2,84 @@ namespace RizzziGit.Commons.GarbageCollection;
 
 internal class GarbageCollectionEventListener
 {
-  private class GCObj
-  {
-    public static Task Wait() => new GCObj(new()).Source.Task;
-
-    private GCObj(TaskCompletionSource source) => Source = source;
-    private readonly TaskCompletionSource Source;
-    ~GCObj() => Source.SetResult();
-  }
-
-  private static readonly Dictionary<WeakReference<Action>, CancellationTokenSource> CancellationTokenSources = [];
-
-  private static void Register(WeakReference<Action> action)
-  {
-    CancellationTokenSource cancellationTokenSource = new();
-
-    lock (CancellationTokenSources)
+    private class GCObj
     {
-      CancellationTokenSources.Add(action, cancellationTokenSource);
+        public static Task Wait() => new GCObj(new()).Source.Task;
+
+        private GCObj(TaskCompletionSource source) => Source = source;
+
+        private readonly TaskCompletionSource Source;
+
+        ~GCObj() => Source.SetResult();
     }
 
-    wait(action);
+    private static readonly Dictionary<
+        WeakReference<Action>,
+        CancellationTokenSource
+    > CancellationTokenSources = [];
 
-    return;
-
-    void wait(WeakReference<Action> action) => GCObj.Wait().ContinueWith((_) => check(action));
-    void check(WeakReference<Action> action)
+    private static void Register(WeakReference<Action> action)
     {
-      Action handler;
-      lock (CancellationTokenSources)
-      {
-        if (!action.TryGetTarget(out Action? target) || cancellationTokenSource.IsCancellationRequested)
-        {
-          try { cancellationTokenSource.Dispose(); } catch { }
-          CancellationTokenSources.Remove(action);
+        CancellationTokenSource cancellationTokenSource = new();
 
-          return;
+        lock (CancellationTokenSources)
+        {
+            CancellationTokenSources.Add(action, cancellationTokenSource);
         }
 
-        handler = target;
-      }
+        wait(action);
 
-      handler();
-      wait(action);
-    }
-  }
+        return;
 
-  public static void Register(Action action) => Register(new WeakReference<Action>(action));
-
-  public static void Unregister(Action action)
-  {
-    lock (CancellationTokenSources)
-    {
-      foreach (var (weakReference, cancellationTokenSource) in CancellationTokenSources)
-      {
-        if (!weakReference.TryGetTarget(out Action? target) || target != action)
+        void wait(WeakReference<Action> action) => GCObj.Wait().ContinueWith((_) => check(action));
+        void check(WeakReference<Action> action)
         {
-          continue;
-        }
+            Action handler;
+            lock (CancellationTokenSources)
+            {
+                if (
+                    !action.TryGetTarget(out Action? target)
+                    || cancellationTokenSource.IsCancellationRequested
+                )
+                {
+                    try
+                    {
+                        cancellationTokenSource.Dispose();
+                    }
+                    catch { }
+                    CancellationTokenSources.Remove(action);
 
-        try { cancellationTokenSource.Cancel(); } catch { };
-      }
+                    return;
+                }
+
+                handler = target;
+            }
+
+            handler();
+            wait(action);
+        }
     }
-  }
+
+    public static void Register(Action action) => Register(new WeakReference<Action>(action));
+
+    public static void Unregister(Action action)
+    {
+        lock (CancellationTokenSources)
+        {
+            foreach (var (weakReference, cancellationTokenSource) in CancellationTokenSources)
+            {
+                if (!weakReference.TryGetTarget(out Action? target) || target != action)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    cancellationTokenSource.Cancel();
+                }
+                catch { }
+                ;
+            }
+        }
+    }
 }

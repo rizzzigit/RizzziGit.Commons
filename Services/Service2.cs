@@ -4,6 +4,7 @@ using System.Runtime.ExceptionServices;
 namespace RizzziGit.Commons.Services;
 
 using Logging;
+using Utilities;
 
 public class Service2Exception<D>(Service2<D> service) : Exception
     where D : class
@@ -34,13 +35,14 @@ public abstract class Service2 : Service2<object>
 
     protected virtual Task OnStop(Exception? exception) => Task.CompletedTask;
 
-    protected sealed override Task OnRun(object data, CancellationToken cancellationToken) =>
+    protected sealed override Task OnRun(object context, CancellationToken cancellationToken) =>
         OnRun(cancellationToken);
 
     protected sealed override Task<object> OnStart(CancellationToken cancellationToken) =>
         Task.FromResult(new object());
 
-    protected sealed override Task OnStop(object data, Exception? exception) => OnStop(exception);
+    protected sealed override Task OnStop(object context, Exception? exception) =>
+        OnStop(exception);
 
     public new async Task Start(CancellationToken cancellationToken = default) =>
         await base.Start(cancellationToken);
@@ -51,8 +53,8 @@ public abstract class Service2 : Service2<object>
         await base.Join(cancellationToken);
 }
 
-public abstract class Service2<D> : IService2
-    where D : notnull
+public abstract class Service2<C> : IService2
+    where C : notnull
 {
     public static async Task StartServices(
         IService2[] services,
@@ -130,11 +132,11 @@ public abstract class Service2<D> : IService2
             TaskContinuationOptions.LongRunning
         );
 
-    private sealed record ServiceInstanceData(
+    private sealed record ServiceInstanceContext(
         Task Task,
         CancellationTokenSource CancellationTokenSource,
         Func<Service2State> GetState,
-        Func<StrongBox<D>?> GetData
+        Func<StrongBox<C>?> GetContext
     ) { }
 
     public Service2(string name, IService2 downstream)
@@ -152,7 +154,7 @@ public abstract class Service2<D> : IService2
     }
 
     private ExceptionDispatchInfo? lastException;
-    private ServiceInstanceData? serviceInstanceData;
+    private ServiceInstanceContext? serviceContext;
     private readonly Logger logger;
 
     public readonly string Name;
@@ -161,45 +163,54 @@ public abstract class Service2<D> : IService2
     public event EventHandler<Service2State>? StateChanged;
     public event LoggerHandler? Logged;
 
-    protected void Log(LogLevel level, string scope, string message) =>
-        logger.Log(level, $"[{scope}] {message}");
+    protected void Log(LogLevel level, string message, string? scope = null) =>
+        logger.Log(level, $"{(scope != null ? $"[{scope}] " : "")}{message}");
 
-    protected void Debug(string scope, string message) => Log(LogLevel.Debug, scope, message);
+    protected void Debug(string message, string? scope = null) =>
+        Log(LogLevel.Debug, message, scope);
 
-    protected void Info(string scope, string message) => Log(LogLevel.Info, scope, message);
+    protected void Info(string message, string? scope = null) => Log(LogLevel.Info, message, scope);
 
-    protected void Warn(string scope, string message) => Log(LogLevel.Warn, scope, message);
+    protected void Warn(string message, string? scope = null) => Log(LogLevel.Warn, message, scope);
 
-    protected void Error(string scope, string message) => Log(LogLevel.Error, scope, message);
+    protected void Error(string message, string? scope = null) =>
+        Log(LogLevel.Error, message, scope);
 
-    protected void Fatal(string scope, string message) => Log(LogLevel.Fatal, scope, message);
+    protected void Fatal(string message, string? scope = null) =>
+        Log(LogLevel.Fatal, message, scope);
 
-    public Service2State State => serviceInstanceData?.GetState() ?? Service2State.NotRunning;
-    protected D Data =>
+    protected void Warn(Exception exception, string? scope = null) =>
+        Warn(exception.ToPrintable(), scope);
+
+    protected void Error(Exception exception, string? scope = null) =>
+        Error(exception.ToPrintable(), scope);
+
+    protected void Fatal(Exception exception, string? scope = null) =>
+        Fatal(exception.ToPrintable(), scope);
+
+    public Service2State State => serviceContext?.GetState() ?? Service2State.NotRunning;
+    protected C Context =>
         (
-            serviceInstanceData?.GetData()
-            ?? throw new InvalidOperationException("Data is not yet initialized")
+            serviceContext?.GetContext()
+            ?? throw new InvalidOperationException("Context has has not yet been initialized")
         ).Value!;
 
-    protected abstract Task<D> OnStart(CancellationToken cancellationToken);
+    protected abstract Task<C> OnStart(CancellationToken cancellationToken);
 
-    protected virtual Task OnRun(D data, CancellationToken cancellationToken) =>
+    protected virtual Task OnRun(C context, CancellationToken cancellationToken) =>
         Task.Delay(-1, cancellationToken);
 
-    protected virtual Task OnStop(D data, Exception? exception) => Task.CompletedTask;
+    protected virtual Task OnStop(C context, Exception? exception) => Task.CompletedTask;
 
     public async Task Join(CancellationToken cancellationToken = default)
     {
-        if (lastException != null)
-        {
-            lastException.Throw();
-        }
+        lastException?.Throw();
 
         Task task;
 
         lock (this)
         {
-            task = serviceInstanceData?.Task ?? Task.CompletedTask;
+            task = serviceContext?.Task ?? Task.CompletedTask;
         }
 
         try
@@ -224,11 +235,11 @@ public abstract class Service2<D> : IService2
     {
         CancellationTokenSource cancellationTokenSource = new();
         Service2State currentState = Service2State.NotRunning;
-        StrongBox<D>? currentData = null;
+        StrongBox<C>? currentContext = null;
 
         void setState(Service2State state)
         {
-            Debug("State Update", $"{currentState} -> {currentState = state}");
+            Debug($"{currentState} -> {currentState = state}", "State");
             StateChanged?.Invoke(this, state);
         }
 
@@ -240,7 +251,7 @@ public abstract class Service2<D> : IService2
 
             try
             {
-                currentData = new(
+                currentContext = new(
                     await runStage2Startup(cancellationToken, startupCancellationToken)
                 );
             }
@@ -256,7 +267,7 @@ public abstract class Service2<D> : IService2
 
             try
             {
-                await runStage2Run(currentData!.Value!, cancellationToken);
+                await runStage2Run(currentContext!.Value!, cancellationToken);
             }
             catch (Exception exception)
             {
@@ -264,7 +275,7 @@ public abstract class Service2<D> : IService2
 
                 try
                 {
-                    await runStage2Stop(currentData!.Value!, exception);
+                    await runStage2Stop(currentContext!.Value!, exception);
                 }
                 catch (Exception stopException)
                 {
@@ -280,7 +291,7 @@ public abstract class Service2<D> : IService2
 
             try
             {
-                await runStage2Stop(currentData!.Value!, null);
+                await runStage2Stop(currentContext!.Value!, null);
             }
             catch
             {
@@ -292,7 +303,7 @@ public abstract class Service2<D> : IService2
             setState(Service2State.NotRunning);
         }
 
-        async Task<D> runStage2Startup(
+        async Task<C> runStage2Startup(
             CancellationToken cancellationToken,
             CancellationToken startupCancellationToken
         )
@@ -313,11 +324,11 @@ public abstract class Service2<D> : IService2
             }
         }
 
-        async Task runStage2Run(D data, CancellationToken cancellationToken)
+        async Task runStage2Run(C context, CancellationToken cancellationToken)
         {
             try
             {
-                await OnRun(data, cancellationToken);
+                await OnRun(context, cancellationToken);
             }
             catch (Exception exception)
             {
@@ -333,11 +344,11 @@ public abstract class Service2<D> : IService2
             }
         }
 
-        async Task runStage2Stop(D data, Exception? exception)
+        async Task runStage2Stop(C context, Exception? exception)
         {
             try
             {
-                await OnStop(data, exception);
+                await OnStop(context, exception);
             }
             catch (Exception e)
             {
@@ -353,8 +364,8 @@ public abstract class Service2<D> : IService2
         lock (this)
         {
             lastException = null;
-            serviceInstanceData = new(
-                Service2<D>
+            serviceContext = new(
+                Service2<C>
                     .GetTaskFactory()
                     .StartNew(
                         () =>
@@ -388,7 +399,7 @@ public abstract class Service2<D> : IService2
                             {
                                 lock (this)
                                 {
-                                    serviceInstanceData = null;
+                                    serviceContext = null;
                                 }
                             }
                         },
@@ -396,7 +407,7 @@ public abstract class Service2<D> : IService2
                     ),
                 cancellationTokenSource,
                 () => currentState,
-                () => currentData
+                () => currentContext
             );
         }
 
@@ -405,19 +416,19 @@ public abstract class Service2<D> : IService2
 
     public async Task Stop()
     {
-        ServiceInstanceData? serviceInstanceData;
+        ServiceInstanceContext? serviceInstanceContext;
 
         lock (this)
         {
-            serviceInstanceData = this.serviceInstanceData;
+            serviceInstanceContext = this.serviceContext;
 
-            if (serviceInstanceData == null)
+            if (serviceInstanceContext == null)
             {
                 return;
             }
             else
             {
-                Service2State state = serviceInstanceData.GetState();
+                Service2State state = serviceInstanceContext.GetState();
 
                 if (!(state == Service2State.Running || state == Service2State.StartingUp))
                 {
@@ -427,19 +438,19 @@ public abstract class Service2<D> : IService2
 
             try
             {
-                serviceInstanceData.CancellationTokenSource.Cancel();
+                serviceInstanceContext.CancellationTokenSource.Cancel();
             }
             catch { }
         }
 
-        if (serviceInstanceData == null)
+        if (serviceInstanceContext == null)
         {
             return;
         }
 
         try
         {
-            await serviceInstanceData.Task;
+            await serviceInstanceContext.Task;
         }
         catch { }
     }

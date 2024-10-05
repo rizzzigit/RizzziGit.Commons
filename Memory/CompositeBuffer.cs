@@ -2,7 +2,8 @@ using System.Collections;
 
 namespace RizzziGit.Commons.Memory;
 
-using Extensions.Array;
+using Extensions;
+using Utilities;
 
 public enum StringEncoding
 {

@@ -2,137 +2,180 @@ namespace RizzziGit.Commons.Collections;
 
 public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnumerable<T>
 {
-  private readonly Queue<T> Backlog = new();
-  private readonly Queue<TaskCompletionSource<TaskCompletionSource<T>>> InsertQueue = new();
-  private readonly Queue<TaskCompletionSource<T>> RemoveQueue = new();
+    private readonly Queue<T> Backlog = new();
+    private readonly Queue<TaskCompletionSource<TaskCompletionSource<T>>> InsertQueue = new();
+    private readonly Queue<TaskCompletionSource<T>> RemoveQueue = new();
 
-  private bool IsDisposed = false;
-  private Exception? Exception;
+    private bool IsDisposed = false;
+    private Exception? Exception;
 
-  public readonly int? Capacity = capacity;
+    public readonly int? Capacity = capacity;
 
-  public int BacklogCount => Backlog.Count;
-  public int InsertQueueCount => InsertQueue.Count;
-  public int RemoveQueueCount => RemoveQueue.Count;
-  public int Count => BacklogCount + InsertQueueCount + RemoveQueueCount;
+    public int BacklogCount => Backlog.Count;
+    public int InsertQueueCount => InsertQueue.Count;
+    public int RemoveQueueCount => RemoveQueue.Count;
+    public int Count => BacklogCount + InsertQueueCount + RemoveQueueCount;
 
-  private void ThrowIfDisposed()
-  {
-    if (Exception != null)
+    private void ThrowIfDisposed()
     {
-      throw Exception;
+        if (Exception != null)
+        {
+            throw Exception;
+        }
+
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
     }
 
-    ObjectDisposedException.ThrowIf(IsDisposed, this);
-  }
+    public void Dispose() => Dispose(null);
 
-  public void Dispose() => Dispose(null);
-  public void Dispose(Exception? exception = null)
-  {
-    lock (this)
+    public void Dispose(Exception? exception = null)
     {
-      ThrowIfDisposed();
+        lock (this)
+        {
+            ThrowIfDisposed();
 
-      IsDisposed = true;
-      Exception = exception;
+            IsDisposed = true;
+            Exception = exception;
+        }
     }
-  }
 
-  public Task<T> Dequeue() => Dequeue(CancellationToken.None);
-  public Task<T> Dequeue(CancellationToken cancellationToken)
-  {
-    lock (this)
+    public Task<T> Dequeue() => Dequeue(CancellationToken.None);
+
+    public Task<T> Dequeue(CancellationToken cancellationToken)
     {
-      if (BacklogCount == 0 && InsertQueueCount == 0 && RemoveQueueCount == 0)
-      {
-        ThrowIfDisposed();
-      }
-
-      TaskCompletionSource<T> source = new();
-
-      while (true)
-      {
-        if (cancellationToken.IsCancellationRequested)
+        lock (this)
         {
-          source.SetCanceled(cancellationToken);
-          break;
-        }
+            if (BacklogCount == 0 && InsertQueueCount == 0 && RemoveQueueCount == 0)
+            {
+                ThrowIfDisposed();
+            }
 
-        if (Backlog.TryDequeue(out T? backlogResult))
-        {
-          source.SetResult(backlogResult);
-          break;
-        }
-        else if (InsertQueue.TryDequeue(out TaskCompletionSource<TaskCompletionSource<T>>? insertResult))
-        {
-          if (!insertResult.TrySetResult(source))
-          {
-            continue;
-          }
+            TaskCompletionSource<T> source = new();
 
-          break;
-        }
-        else
-        {
-          RemoveQueue.Enqueue(source);
-          break;
-        }
-      }
+            while (true)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    source.SetCanceled(cancellationToken);
+                    break;
+                }
 
-      return source.Task.WaitAsync(cancellationToken);
+                if (Backlog.TryDequeue(out T? backlogResult))
+                {
+                    source.SetResult(backlogResult);
+                    break;
+                }
+                else if (
+                    InsertQueue.TryDequeue(
+                        out TaskCompletionSource<TaskCompletionSource<T>>? insertResult
+                    )
+                )
+                {
+                    if (!insertResult.TrySetResult(source))
+                    {
+                        continue;
+                    }
+
+                    break;
+                }
+                else
+                {
+                    RemoveQueue.Enqueue(source);
+                    break;
+                }
+            }
+
+            return source.Task.WaitAsync(cancellationToken);
+        }
     }
-  }
 
-  public Task Enqueue(T item) => Enqueue(item, CancellationToken.None);
-  public Task Enqueue(T item, CancellationToken cancellationToken)
-  {
-    lock (this)
+    public Task Enqueue(T item) => Enqueue(item, CancellationToken.None);
+
+    public Task Enqueue(T item, CancellationToken cancellationToken)
     {
-      ThrowIfDisposed();
-
-      TaskCompletionSource<TaskCompletionSource<T>>? insertSource = null;
-
-      while (true)
-      {
-        if (cancellationToken.IsCancellationRequested)
+        lock (this)
         {
-          throw new TaskCanceledException("A task was cancelled.", null, cancellationToken);
-        }
+            ThrowIfDisposed();
 
-        if (InsertQueue.Count == 0 && RemoveQueue.Count == 0 && (Capacity == null || Capacity > Backlog.Count))
-        {
-          Backlog.Enqueue(item);
-          break;
-        }
-        else if (InsertQueue.Count == 0 && RemoveQueue.TryDequeue(out TaskCompletionSource<T>? removeResult))
-        {
-          if (!removeResult.TrySetResult(item))
-          {
-            continue;
-          }
+            TaskCompletionSource<TaskCompletionSource<T>>? insertSource = null;
 
-          break;
-        }
-        else
-        {
-          insertSource = new();
-          cancellationToken.Register(() => insertSource.TrySetCanceled(cancellationToken));
-          InsertQueue.Enqueue(insertSource);
-          break;
-        }
-      }
+            while (true)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw new TaskCanceledException(
+                        "A task was cancelled.",
+                        null,
+                        cancellationToken
+                    );
+                }
 
-      return insertSource?.Task.ContinueWith(async (task) => (await task).SetResult(item)).WaitAsync(cancellationToken) ?? Task.CompletedTask;
+                if (
+                    InsertQueue.Count == 0
+                    && RemoveQueue.Count == 0
+                    && (Capacity == null || Capacity > Backlog.Count)
+                )
+                {
+                    Backlog.Enqueue(item);
+                    break;
+                }
+                else if (
+                    InsertQueue.Count == 0
+                    && RemoveQueue.TryDequeue(out TaskCompletionSource<T>? removeResult)
+                )
+                {
+                    if (!removeResult.TrySetResult(item))
+                    {
+                        continue;
+                    }
+
+                    break;
+                }
+                else
+                {
+                    insertSource = new();
+                    cancellationToken.Register(
+                        () => insertSource.TrySetCanceled(cancellationToken)
+                    );
+                    InsertQueue.Enqueue(insertSource);
+                    break;
+                }
+            }
+
+            return insertSource
+                    ?.Task.ContinueWith(async (task) => (await task).SetResult(item))
+                    .WaitAsync(cancellationToken) ?? Task.CompletedTask;
+        }
     }
-  }
 
-  public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-  {
-    while (true)
+    public async IAsyncEnumerator<T> GetAsyncEnumerator(
+        CancellationToken cancellationToken = default
+    )
     {
-      cancellationToken.ThrowIfCancellationRequested();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
-      yield return await Dequeue(cancellationToken);
+            T item;
+
+            try
+            {
+                item = await Dequeue(cancellationToken);
+            }
+            catch (ObjectDisposedException)
+            {
+                yield break;
+            }
+
+            yield return item;
+        }
     }
-  }
+
+    public async IAsyncEnumerable<T> ToAsyncEnumerable()
+    {
+        await foreach (T item in this)
+        {
+            yield return item;
+        }
+    }
 }

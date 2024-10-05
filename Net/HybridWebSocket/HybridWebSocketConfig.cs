@@ -1,6 +1,6 @@
-namespace RizzziGit.Commons.Net;
+namespace RizzziGit.Commons.Net.HybridWebSocket;
 
 public struct HybridWebSocketConfig()
 {
-  public int MaxWebSocketPerMessageSize = 4_096;
+    public int MaxWebSocketPerMessageSize = 4_096;
 }

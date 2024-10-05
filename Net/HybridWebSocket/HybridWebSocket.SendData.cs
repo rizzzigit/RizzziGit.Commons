@@ -1,29 +1,32 @@
-namespace RizzziGit.Commons.Net;
+namespace RizzziGit.Commons.Net.HybridWebSocket;
 
 using System.Net.WebSockets;
 using Memory;
 
 public partial class HybridWebSocket
 {
-  public event Action<byte>? OnSend;
+    public event Action<byte>? OnSend;
 
-  private async Task SendData(CompositeBuffer data)
-  {
-    if ((StateInt == STATE_LOCAL_CLOSING) || (StateInt != STATE_OPEN && StateInt != STATE_REMOTE_CLOSING))
+    private async Task SendData(CompositeBuffer data)
     {
-      throw new InvalidOperationException("Invalid state to send data.");
-    }
+        if (
+            (StateInt == STATE_LOCAL_CLOSING)
+            || (StateInt != STATE_OPEN && StateInt != STATE_REMOTE_CLOSING)
+        )
+        {
+            throw new InvalidOperationException("Invalid state to send data.");
+        }
 
-    OnSend?.Invoke(data[0]);
+        OnSend?.Invoke(data[0]);
 
-    for (long offset = 0; offset < data.Length; offset += 4096)
-    {
-      await WebSocket.SendAsync(
-        data.Slice(offset, Math.Min(offset + 4096, data.Length)).ToByteArray(),
-        WebSocketMessageType.Binary,
-        (offset + 4096) >= data.Length,
-        RequireCancellationToken()
-      );
+        for (long offset = 0; offset < data.Length; offset += 4096)
+        {
+            await WebSocket.SendAsync(
+                data.Slice(offset, Math.Min(offset + 4096, data.Length)).ToByteArray(),
+                WebSocketMessageType.Binary,
+                (offset + 4096) >= data.Length,
+                RequireCancellationToken()
+            );
+        }
     }
-  }
 }
