@@ -24,7 +24,7 @@ public enum Service2State : byte
 
 public abstract class Service2 : Service2<object>
 {
-    protected Service2(string name, IService2? downstream = null)
+    protected Service2(string name, IService2 downstream)
         : base(name, downstream) { }
 
     protected Service2(string name, Logger? downstream = null)
@@ -139,7 +139,7 @@ public abstract class Service2<C> : IService2
         Func<StrongBox<C>?> GetContext
     ) { }
 
-    public Service2(string name, IService2? downstream = null)
+    public Service2(string name, IService2 downstream)
         : this(name, downstream?.Logger) { }
 
     public Service2(string name, Logger? downstream = null)
