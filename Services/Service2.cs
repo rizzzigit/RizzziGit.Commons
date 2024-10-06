@@ -24,7 +24,7 @@ public enum Service2State : byte
 
 public abstract class Service2 : Service2<object>
 {
-    protected Service2(string name, IService2 downstream)
+    protected Service2(string name, IService2? downstream = null)
         : base(name, downstream) { }
 
     protected Service2(string name, Logger? downstream = null)
@@ -139,8 +139,8 @@ public abstract class Service2<C> : IService2
         Func<StrongBox<C>?> GetContext
     ) { }
 
-    public Service2(string name, IService2 downstream)
-        : this(name, downstream.Logger) { }
+    public Service2(string name, IService2? downstream = null)
+        : this(name, downstream?.Logger) { }
 
     public Service2(string name, Logger? downstream = null)
     {
@@ -179,16 +179,36 @@ public abstract class Service2<C> : IService2
     protected void Fatal(string message, string? scope = null) =>
         Log(LogLevel.Fatal, message, scope);
 
-    protected void Warn(Exception exception, string? scope = null) =>
+    protected T Warn<T>(T exception, string? scope = null)
+        where T : Exception
+    {
         Warn(exception.ToPrintable(), scope);
 
-    protected void Error(Exception exception, string? scope = null) =>
+        return exception;
+    }
+
+    protected T Error<T>(T exception, string? scope = null)
+        where T : Exception
+    {
         Error(exception.ToPrintable(), scope);
 
-    protected void Fatal(Exception exception, string? scope = null) =>
+        return exception;
+    }
+
+    protected T Fatal<T>(T exception, string? scope = null)
+        where T : Exception
+    {
         Fatal(exception.ToPrintable(), scope);
 
+        return exception;
+    }
+
     public Service2State State => serviceContext?.GetState() ?? Service2State.NotRunning;
+
+    protected CancellationToken CancellationToken =>
+        serviceContext?.CancellationTokenSource.Token
+        ?? throw new InvalidOperationException("Service is not running.");
+
     protected C Context =>
         (
             serviceContext?.GetContext()
