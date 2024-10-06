@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace RizzziGit.Commons.Collections;
 
 public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnumerable<T>
@@ -148,8 +150,8 @@ public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnum
         }
     }
 
-    public async IAsyncEnumerator<T> GetAsyncEnumerator(
-        CancellationToken cancellationToken = default
+    async IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(
+        CancellationToken cancellationToken
     )
     {
         while (true)
@@ -171,9 +173,12 @@ public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnum
         }
     }
 
-    public async IAsyncEnumerable<T> ToAsyncEnumerable()
+    public async IAsyncEnumerable<T> ToAsyncEnumerable(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
-        await foreach (T item in this)
+        
+        await foreach (T item in this.WithCancellation(cancellationToken))
         {
             yield return item;
         }
