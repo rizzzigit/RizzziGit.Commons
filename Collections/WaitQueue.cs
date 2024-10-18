@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 
 namespace RizzziGit.Commons.Collections;
 
@@ -16,13 +18,13 @@ public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnum
     public int BacklogCount => Backlog.Count;
     public int InsertQueueCount => InsertQueue.Count;
     public int RemoveQueueCount => RemoveQueue.Count;
-    public int Count => BacklogCount + InsertQueueCount + RemoveQueueCount;
+    public int Count => BacklogCount + InsertQueueCount;
 
     private void ThrowIfDisposed()
     {
         if (Exception != null)
         {
-            throw Exception;
+            ExceptionDispatchInfo.Throw(Exception);
         }
 
         ObjectDisposedException.ThrowIf(IsDisposed, this);
@@ -177,7 +179,6 @@ public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnum
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
-        
         await foreach (T item in this.WithCancellation(cancellationToken))
         {
             yield return item;
