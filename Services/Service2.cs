@@ -22,108 +22,9 @@ public enum Service2State : byte
     Crashed,
 }
 
-public abstract class Service2 : Service2<object>
-{
-    protected Service2(string name, IService2 downstream)
-        : base(name, downstream) { }
-
-    protected Service2(string name, Logger? downstream = null)
-        : base(name, downstream) { }
-
-    protected virtual Task OnRun(CancellationToken cancellationToken) =>
-        Task.Delay(-1, cancellationToken);
-
-    protected virtual Task OnStop(Exception? exception) => Task.CompletedTask;
-
-    protected sealed override Task OnRun(object context, CancellationToken cancellationToken) =>
-        OnRun(cancellationToken);
-
-    protected sealed override Task<object> OnStart(CancellationToken cancellationToken) =>
-        Task.FromResult(new object());
-
-    protected sealed override Task OnStop(object context, Exception? exception) =>
-        OnStop(exception);
-
-    public new async Task Start(CancellationToken cancellationToken = default) =>
-        await base.Start(cancellationToken);
-
-    public new async Task Stop() => await base.Stop();
-
-    public new async Task Join(CancellationToken cancellationToken = default) =>
-        await base.Join(cancellationToken);
-}
-
-public abstract class Service2<C> : IService2
+public abstract partial class Service2<C> : IService2
     where C : notnull
 {
-    public static async Task StartServices(
-        IService2[] services,
-        CancellationToken cancellationToken = default
-    )
-    {
-        List<IService2> startedServices = [];
-        try
-        {
-            foreach (IService2 service in services)
-            {
-                await service.Start(cancellationToken);
-
-                startedServices.Add(service);
-            }
-        }
-        catch (Exception exception)
-        {
-            List<ExceptionDispatchInfo> stopExceptions = [];
-
-            foreach (IService2 service in services)
-            {
-                try
-                {
-                    await service.Stop();
-                }
-                catch (Exception stopException)
-                {
-                    stopExceptions.Add(ExceptionDispatchInfo.Capture(stopException));
-                }
-            }
-
-            if (stopExceptions.Count == 0)
-            {
-                throw;
-            }
-
-            throw new AggregateException(
-                [exception, .. stopExceptions.Select((exception) => exception.SourceException)]
-            );
-        }
-    }
-
-    public static async Task StopServices(params IService2[] services)
-    {
-        List<ExceptionDispatchInfo> stopExceptions = [];
-
-        foreach (IService2 service in services)
-        {
-            try
-            {
-                await service.Stop();
-            }
-            catch (Exception exception)
-            {
-                stopExceptions.Add(ExceptionDispatchInfo.Capture(exception));
-            }
-        }
-
-        if (stopExceptions.Count == 0)
-        {
-            return;
-        }
-
-        throw new AggregateException(
-            [.. stopExceptions.Select((exception) => exception.SourceException)]
-        );
-    }
-
     private static TaskFactory? taskFactory;
 
     private static TaskFactory GetTaskFactory() =>
@@ -131,13 +32,6 @@ public abstract class Service2<C> : IService2
             TaskCreationOptions.LongRunning,
             TaskContinuationOptions.LongRunning
         );
-
-    private sealed record ServiceInstanceContext(
-        Task Task,
-        CancellationTokenSource CancellationTokenSource,
-        Func<Service2State> GetState,
-        Func<StrongBox<C>?> GetContext
-    ) { }
 
     public Service2(string name, IService2 downstream)
         : this(name, downstream?.Logger) { }
@@ -154,56 +48,14 @@ public abstract class Service2<C> : IService2
     }
 
     private ExceptionDispatchInfo? lastException;
-    private ServiceInstanceContext? serviceContext;
+    private ServiceInstance? serviceContext;
     private readonly Logger logger;
 
     public readonly string Name;
 
     public event EventHandler<Exception>? ExceptionThrown;
     public event EventHandler<Service2State>? StateChanged;
-    public event LoggerHandler? Logged;
-
-    protected void Log(LogLevel level, string message, string? scope = null) =>
-        logger.Log(level, $"{(scope != null ? $"[{scope}] " : "")}{message}");
-
-    protected void Debug(string message, string? scope = null) =>
-        Log(LogLevel.Debug, message, scope);
-
-    protected void Info(string message, string? scope = null) => Log(LogLevel.Info, message, scope);
-
-    protected void Warn(string message, string? scope = null) => Log(LogLevel.Warn, message, scope);
-
-    protected void Error(string message, string? scope = null) =>
-        Log(LogLevel.Error, message, scope);
-
-    protected void Fatal(string message, string? scope = null) =>
-        Log(LogLevel.Fatal, message, scope);
-
-    protected T Warn<T>(T exception, string? scope = null)
-        where T : Exception
-    {
-        Warn(exception.ToPrintable(), scope);
-
-        return exception;
-    }
-
-    protected T Error<T>(T exception, string? scope = null)
-        where T : Exception
-    {
-        Error(exception.ToPrintable(), scope);
-
-        return exception;
-    }
-
-    protected T Fatal<T>(T exception, string? scope = null)
-        where T : Exception
-    {
-        Fatal(exception.ToPrintable(), scope);
-
-        return exception;
-    }
-
-    public Service2State State => serviceContext?.GetState() ?? Service2State.NotRunning;
+    public Service2State State => serviceContext?.State ?? Service2State.NotRunning;
 
     protected CancellationToken CancellationToken =>
         serviceContext?.CancellationTokenSource.Token
@@ -211,7 +63,7 @@ public abstract class Service2<C> : IService2
 
     protected C Context =>
         (
-            serviceContext?.GetContext()
+            serviceContext?.Context
             ?? throw new InvalidOperationException("Context has has not yet been initialized")
         ).Value!;
 
@@ -222,170 +74,25 @@ public abstract class Service2<C> : IService2
 
     protected virtual Task OnStop(C context, Exception? exception) => Task.CompletedTask;
 
-    public async Task Join(CancellationToken cancellationToken = default)
+    private void SetState(ServiceInstance instance, Service2State state)
     {
-        lastException?.Throw();
-
-        Task task;
-
-        lock (this)
-        {
-            task = serviceContext?.Task ?? Task.CompletedTask;
-        }
-
-        try
-        {
-            await task.WaitAsync(cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            if (
-                exception is OperationCanceledException operationCanceledException
-                && operationCanceledException.CancellationToken == cancellationToken
-            )
-            {
-                return;
-            }
-
-            throw;
-        }
+        Info($"{instance.State} -> {instance.State = state}", "State");
+        StateChanged?.Invoke(this, state);
     }
 
-    protected async Task Start(CancellationToken startupCancellationToken = default)
+    public async Task Start(CancellationToken startupCancellationToken = default)
     {
         CancellationTokenSource cancellationTokenSource = new();
-        Service2State currentState = Service2State.NotRunning;
-        StrongBox<C>? currentContext = null;
-
-        void setState(Service2State state)
-        {
-            Debug($"{currentState} -> {currentState = state}", "State");
-            StateChanged?.Invoke(this, state);
-        }
-
         TaskCompletionSource startupTaskCompletionSource = new();
-
-        async Task runStage1(CancellationToken cancellationToken)
-        {
-            setState(Service2State.StartingUp);
-
-            try
-            {
-                currentContext = new(
-                    await runStage2Startup(cancellationToken, startupCancellationToken)
-                );
-            }
-            catch
-            {
-                setState(Service2State.CrashingDown);
-                setState(Service2State.Crashed);
-                throw;
-            }
-
-            setState(Service2State.Running);
-            startupTaskCompletionSource.SetResult();
-
-            try
-            {
-                await runStage2Run(currentContext!.Value!, cancellationToken);
-            }
-            catch (Exception exception)
-            {
-                setState(Service2State.CrashingDown);
-
-                try
-                {
-                    await runStage2Stop(currentContext!.Value!, exception);
-                }
-                catch (Exception stopException)
-                {
-                    setState(Service2State.Crashed);
-                    throw new AggregateException(exception, stopException);
-                }
-
-                setState(Service2State.Crashed);
-                throw;
-            }
-
-            setState(Service2State.ShuttingDown);
-
-            try
-            {
-                await runStage2Stop(currentContext!.Value!, null);
-            }
-            catch
-            {
-                setState(Service2State.CrashingDown);
-                setState(Service2State.Crashed);
-                throw;
-            }
-
-            setState(Service2State.NotRunning);
-        }
-
-        async Task<C> runStage2Startup(
-            CancellationToken cancellationToken,
-            CancellationToken startupCancellationToken
-        )
-        {
-            using CancellationTokenSource startupLinkedCancellationTokenSource =
-                CancellationTokenSource.CreateLinkedTokenSource(
-                    startupCancellationToken,
-                    cancellationToken
-                );
-            try
-            {
-                return await OnStart(startupLinkedCancellationTokenSource.Token);
-            }
-            catch (Exception exception)
-            {
-                startupTaskCompletionSource.SetException(exception);
-                throw;
-            }
-        }
-
-        async Task runStage2Run(C context, CancellationToken cancellationToken)
-        {
-            try
-            {
-                await OnRun(context, cancellationToken);
-            }
-            catch (Exception exception)
-            {
-                if (
-                    exception is OperationCanceledException operationCanceledException
-                    && (operationCanceledException.CancellationToken == cancellationToken)
-                )
-                {
-                    return;
-                }
-
-                throw;
-            }
-        }
-
-        async Task runStage2Stop(C context, Exception? exception)
-        {
-            try
-            {
-                await OnStop(context, exception);
-            }
-            catch (Exception e)
-            {
-                if (exception != null)
-                {
-                    throw new AggregateException(exception, e);
-                }
-
-                throw;
-            }
-        }
 
         lock (this)
         {
             lastException = null;
-            serviceContext = new(
-                Service2<C>
+            TaskCompletionSource<ServiceInstance> initiation = new();
+
+            serviceContext = new()
+            {
+                Task = Service2<C>
                     .GetTaskFactory()
                     .StartNew(
                         () =>
@@ -394,25 +101,25 @@ public abstract class Service2<C> : IService2
                             {
                                 try
                                 {
-                                    runStage1(cancellationTokenSource.Token).Wait();
+                                    RunInternal(
+                                            initiation.Task.GetAwaiter().GetResult(),
+                                            startupCancellationToken,
+                                            startupTaskCompletionSource,
+                                            cancellationTokenSource.Token
+                                        )
+                                        .GetAwaiter()
+                                        .GetResult();
                                 }
-                                catch (AggregateException aggregateException)
+                                catch (Exception exception)
                                 {
-                                    ExceptionDispatchInfo exception = ExceptionDispatchInfo.Capture(
-                                        aggregateException.GetBaseException()
-                                    );
-
                                     lock (this)
                                     {
-                                        lastException = exception;
-                                        Fatal(
-                                            "Fatal Error",
-                                            $"{exception.SourceException.Message}{(exception.SourceException.StackTrace != null ? $" {exception.SourceException.StackTrace}" : "")}"
-                                        );
-                                        ExceptionThrown?.Invoke(this, exception.SourceException);
+                                        lastException = ExceptionDispatchInfo.Capture(exception);
+                                        Fatal(exception.ToPrintable(), "Fatal Error");
+                                        ExceptionThrown?.Invoke(this, exception);
                                     }
 
-                                    exception.Throw();
+                                    throw;
                                 }
                             }
                             finally
@@ -425,10 +132,12 @@ public abstract class Service2<C> : IService2
                         },
                         CancellationToken.None
                     ),
-                cancellationTokenSource,
-                () => currentState,
-                () => currentContext
-            );
+                CancellationTokenSource = cancellationTokenSource,
+                State = Service2State.NotRunning,
+                Context = null
+            };
+
+            initiation.SetResult(serviceContext);
         }
 
         await startupTaskCompletionSource.Task;
@@ -436,7 +145,7 @@ public abstract class Service2<C> : IService2
 
     public async Task Stop()
     {
-        ServiceInstanceContext? serviceInstanceContext;
+        ServiceInstance? serviceInstanceContext;
 
         lock (this)
         {
@@ -448,7 +157,7 @@ public abstract class Service2<C> : IService2
             }
             else
             {
-                Service2State state = serviceInstanceContext.GetState();
+                Service2State state = serviceInstanceContext.State;
 
                 if (!(state == Service2State.Running || state == Service2State.StartingUp))
                 {
@@ -478,7 +187,7 @@ public abstract class Service2<C> : IService2
     string IService2.Name => Name;
     Logger IService2.Logger => logger;
 
-    Task IService2.Join(CancellationToken cancellationToken) => Join(cancellationToken);
+    Task IService2.Watch(CancellationToken cancellationToken) => Watch(cancellationToken);
 
     Task IService2.Start(CancellationToken cancellationToken) => Start(cancellationToken);
 
@@ -494,7 +203,7 @@ public interface IService2
     public event EventHandler<Exception>? ExceptionThrown;
     public event EventHandler<Service2State>? StateChanged;
 
-    public Task Join(CancellationToken cancellationToken = default);
+    public Task Watch(CancellationToken cancellationToken = default);
     public Task Start(CancellationToken cancellationToken = default);
     public Task Stop();
 }
