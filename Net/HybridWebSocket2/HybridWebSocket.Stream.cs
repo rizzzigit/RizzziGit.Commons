@@ -67,7 +67,7 @@ public sealed partial class HybridWebSocket
                     ExceptionDispatchInfo.Throw(abortState.Exception);
                 }
 
-                throw new InvalidOperationException();
+                throw new InvalidOperationException("Invalid state to push data.");
             }
         }
 
@@ -77,18 +77,31 @@ public sealed partial class HybridWebSocket
         )
         {
             long maxSize = 1024 * 8;
-            if (buffer.Length > maxSize) {
-                for (long offset = 0; offset < buffer.Length; offset += maxSize) {
-                    await Push(buffer.Slice(offset, Math.Min(offset + maxSize, buffer.Length)), cancellationToken);
+            if (buffer.Length > maxSize)
+            {
+                for (long offset = 0; offset < buffer.Length; offset += maxSize)
+                {
+                    await Push(
+                        buffer.Slice(offset, Math.Min(offset + maxSize, buffer.Length)),
+                        cancellationToken
+                    );
                 }
+
+                return this;
             }
 
             EnsureFeedState();
 
             using CancellationTokenSource cancellationTokenSource =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, serviceCancellation);
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    serviceCancellation
+                );
 
-            await waitQueue.Enqueue(new Entry.Feed { Buffer = buffer }, cancellationTokenSource.Token);
+            await waitQueue.Enqueue(
+                new Entry.Feed { Buffer = buffer },
+                cancellationTokenSource.Token
+            );
 
             return this;
         }
@@ -98,7 +111,10 @@ public sealed partial class HybridWebSocket
             EnsureFeedState();
 
             using CancellationTokenSource cancellationTokenSource =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, serviceCancellation);
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    serviceCancellation
+                );
 
             await waitQueue.Enqueue(new Entry.Done(), cancellationTokenSource.Token);
             state = new State.Done();
@@ -114,7 +130,10 @@ public sealed partial class HybridWebSocket
             EnsureFeedState();
 
             using CancellationTokenSource cancellationTokenSource =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, serviceCancellation);
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    serviceCancellation
+                );
 
             await waitQueue.Enqueue(new Entry.Abort(), cancellationTokenSource.Token);
             state = new State.Abort();
@@ -135,7 +154,10 @@ public sealed partial class HybridWebSocket
             stream ??= new(serviceCancellation);
 
             using CancellationTokenSource cancellationTokenSource =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, serviceCancellation);
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    serviceCancellation
+                );
 
             await waitQueue.Enqueue(
                 new Entry.Redirect { RedirectMode = redirectMode, Stream = stream },
@@ -156,11 +178,14 @@ public sealed partial class HybridWebSocket
                     ExceptionDispatchInfo.Throw(abortState.Exception);
                 }
 
-                throw new InvalidOperationException();
+                throw new InvalidOperationException("Invalid state to push data.");
             }
 
             using CancellationTokenSource cancellationTokenSource =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, serviceCancellation);
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    serviceCancellation
+                );
 
             Entry item = await waitQueue.Dequeue(cancellationTokenSource.Token);
 
@@ -168,7 +193,7 @@ public sealed partial class HybridWebSocket
                 return feed.Buffer;
             else if (item is Entry.Done)
                 return null;
-            else if (item is Entry.Abort)
+            else if (item is Entry.Abort abort)
                 throw new OperationCanceledException();
             else if (item is Entry.Redirect error)
                 throw new StreamRedirectException(error.RedirectMode, error.Stream);

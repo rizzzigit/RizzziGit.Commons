@@ -307,6 +307,7 @@ public sealed partial class HybridWebSocket
         }
         catch (Exception exception)
         {
+            Fatal(exception);
             throw new InvalidOperationException("Failed to deserialize packet", exception);
         }
     }

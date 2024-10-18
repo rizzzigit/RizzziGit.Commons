@@ -4,6 +4,36 @@ namespace RizzziGit.Commons.Net.HybridWebSocket2;
 
 using Memory;
 
+public sealed class HybridWebSocketRequest(
+    HybridWebSocket.Stream request,
+    HybridWebSocket.Stream response
+)
+{
+    public Task Send(CompositeBuffer bytes, CancellationToken cancellationToken = default) =>
+        request.Push(bytes, cancellationToken);
+
+    public Task Abort(Exception? exception = null, CancellationToken cancellationToken = default) =>
+        request.Abort(exception, cancellationToken);
+
+    public Task End(CancellationToken cancellationToken = default) =>
+        request.Finish(cancellationToken);
+
+    public Task<CompositeBuffer?> Receive(CancellationToken cancellationToken = default) =>
+        response.Shift(cancellationToken);
+}
+
+public sealed class HybridWebSocketMessage(HybridWebSocket.Stream message)
+{
+    public Task Send(CompositeBuffer bytes, CancellationToken cancellationToken = default) =>
+        message.Push(bytes, cancellationToken);
+
+    public Task Abort(Exception? exception = null, CancellationToken cancellationToken = default) =>
+        message.Abort(exception, cancellationToken);
+
+    public Task End(CancellationToken cancellationToken = default) =>
+        message.Finish(cancellationToken);
+}
+
 public sealed partial class HybridWebSocket
 {
     public (Stream requestStream, Stream responseStream) Request()

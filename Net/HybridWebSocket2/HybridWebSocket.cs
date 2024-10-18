@@ -38,9 +38,12 @@ public sealed partial class HybridWebSocket(
     WebSocket webSocket,
     bool isServer,
     string name,
-    IService2? downstream = null
+    Logger? downstream = null
 ) : Service2<HybridWebSocketContext>(name, downstream)
 {
+    public HybridWebSocket(WebSocket webSocket, bool isServer, string name, IService2 downstream)
+        : this(webSocket, isServer, name, downstream.Logger) { }
+
     private readonly WebSocket webSocket = webSocket;
     private readonly bool isServer = isServer;
 
