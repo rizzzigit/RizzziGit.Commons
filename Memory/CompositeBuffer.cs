@@ -855,3 +855,24 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
         }
     }
 }
+
+public static class CompositeBufferExtensions
+{
+    private static CompositeBuffer ConcatInternal(
+        CompositeBuffer destination,
+        CompositeBuffer source
+    )
+    {
+        destination.Append(source);
+
+        return destination;
+    }
+
+    public static ValueTask<CompositeBuffer> ConcatAsync(
+        this IAsyncEnumerable<CompositeBuffer> bytes,
+        CancellationToken cancellationToken = default
+    ) => bytes.AggregateAsync(CompositeBuffer.Allocate(0), ConcatInternal, cancellationToken);
+
+    public static CompositeBuffer Concat(this IEnumerable<CompositeBuffer> bytes) =>
+        bytes.Aggregate(CompositeBuffer.Allocate(0), ConcatInternal);
+}
