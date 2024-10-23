@@ -35,16 +35,16 @@ public enum HybridWebSocketMode : byte
 }
 
 public sealed partial class HybridWebSocket(
-    WebSocket webSocket,
+    System.Net.WebSockets.WebSocket webSocket,
     bool isServer,
     string name,
     Logger? downstream = null
 ) : Service2<HybridWebSocketContext>(name, downstream)
 {
-    public HybridWebSocket(WebSocket webSocket, bool isServer, string name, IService2 downstream)
+    public HybridWebSocket(System.Net.WebSockets.WebSocket webSocket, bool isServer, string name, IService2 downstream)
         : this(webSocket, isServer, name, downstream.Logger) { }
 
-    private readonly WebSocket webSocket = webSocket;
+    private readonly System.Net.WebSockets.WebSocket webSocket = webSocket;
     private readonly bool isServer = isServer;
 
     private async ValueTask<IHybridWebSocketPacket?> Receive(
