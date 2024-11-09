@@ -19,11 +19,11 @@ public static class LogLevelExtensions
 public sealed class Logger(string name)
 {
     private readonly string Name = name;
-    private readonly List<Logger> SubscribedLoggers = [];
+    private readonly List<Logger> SubscriberLoggers = [];
 
     public event LoggerHandler? Logged;
 
-    public void Subscribe(Logger logger) => logger.SubscribedLoggers.Add(this);
+    public void Subscribe(Logger logger) => logger.SubscriberLoggers.Add(this);
 
     public void Subscribe(params Logger[] loggers)
     {
@@ -43,14 +43,14 @@ public sealed class Logger(string name)
 
     public void Unsubscribe(Logger logger)
     {
-        for (int index = 0; index < logger.SubscribedLoggers.Count; index++)
+        for (int index = 0; index < logger.SubscriberLoggers.Count; index++)
         {
-            if (logger.SubscribedLoggers[index] != this)
+            if (logger.SubscriberLoggers[index] != this)
             {
                 continue;
             }
 
-            logger.SubscribedLoggers.RemoveAt(index--);
+            logger.SubscriberLoggers.RemoveAt(index--);
         }
     }
 
@@ -60,15 +60,15 @@ public sealed class Logger(string name)
 
         Logged?.Invoke(level, scope, message, timestamp);
 
-        for (int index = 0; index < SubscribedLoggers.Count; index++)
+        foreach (Logger subscriber in SubscriberLoggers)
         {
-            SubscribedLoggers[index].InternalLog(level, scope, message, timestamp);
+            subscriber.InternalLog(level, scope, message, timestamp);
         }
     }
 
     public void Log(LogLevel level, string message)
     {
-        if (!Enum.IsDefined(typeof(LogLevel), level))
+        if (!Enum.IsDefined(level))
         {
             throw new ArgumentOutOfRangeException(nameof(level));
         }
