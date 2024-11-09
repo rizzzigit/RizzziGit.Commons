@@ -97,22 +97,17 @@ public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnum
 
     public Task Enqueue(T item, CancellationToken cancellationToken)
     {
+        ThrowIfDisposed();
+
+        TaskCompletionSource<TaskCompletionSource<T>>? insertSource = null;
+
         lock (this)
         {
-            ThrowIfDisposed();
-
-            TaskCompletionSource<TaskCompletionSource<T>>? insertSource = null;
+            CancellationTokenRegistration? registration = null;
 
             while (true)
             {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    throw new TaskCanceledException(
-                        "A task was cancelled.",
-                        null,
-                        cancellationToken
-                    );
-                }
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (
                     InsertQueue.Count == 0
@@ -123,7 +118,8 @@ public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnum
                     Backlog.Enqueue(item);
                     break;
                 }
-                else if (
+
+                if (
                     InsertQueue.Count == 0
                     && RemoveQueue.TryDequeue(out TaskCompletionSource<T>? removeResult)
                 )
@@ -135,21 +131,20 @@ public sealed class WaitQueue<T>(int? capacity = null) : IDisposable, IAsyncEnum
 
                     break;
                 }
-                else
-                {
-                    insertSource = new();
-                    cancellationToken.Register(
-                        () => insertSource.TrySetCanceled(cancellationToken)
-                    );
-                    InsertQueue.Enqueue(insertSource);
-                    break;
-                }
-            }
 
-            return insertSource
-                    ?.Task.ContinueWith(async (task) => (await task).SetResult(item))
-                    .WaitAsync(cancellationToken) ?? Task.CompletedTask;
+                insertSource = new();
+                registration = cancellationToken.Register(
+                    () => insertSource.TrySetCanceled(cancellationToken)
+                );
+
+                InsertQueue.Enqueue(insertSource);
+                break;
+            }
         }
+
+        return insertSource
+                ?.Task.ContinueWith(async (task) => (await task).SetResult(item))
+                .WaitAsync(cancellationToken) ?? Task.CompletedTask;
     }
 
     async IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(
