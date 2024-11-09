@@ -1,637 +1,597 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Runtime.ExceptionServices;
-using MongoDB.Bson.IO;
-using MongoDB.Bson.Serialization;
 
 namespace RizzziGit.Commons.Net.WebConnection;
 
 using Collections;
 using Logging;
 using Memory;
+using RizzziGit.Commons.Utilities;
 using Services;
-using Utilities;
 
-public sealed class WebConnectionContext
-{
-    public required ConcurrentDictionary<ulong, CancellationTokenSource> IncomingRequests;
-    public required ConcurrentDictionary<
-        ulong,
-        TaskCompletionSource<WebConnectionContent>
-    > IncomingResponses;
-
-    public required WaitQueue<WebConnectionRequest?> Requests;
-    public required WaitQueue<WebConnectionFeed> Feed;
-
-    public required ulong NextRequestId;
-}
-
-public sealed class WebConnectionOptions
+public record class WebConnectionOptions
 {
     public string Name = "Web Connection";
     public Logger? Logger = null;
 }
 
-public enum PacketType : byte
+public sealed class WebConnectionRequest(TaskCompletionSource<CompositeBuffer> source)
 {
-    Request,
-    RequestCancel,
-    Response,
-    ResponseCancel,
-    ResponseError,
-    ResponseInternalError,
-}
-
-public sealed class WebConnectionRequest(TaskCompletionSource<WebConnectionContent> source)
-{
-    public required WebConnectionContent Request;
+    public required CompositeBuffer Data;
     public required CancellationToken CancellationToken;
 
-    public void Reply(WebConnectionContent response) => source.SetResult(response);
+    public bool CanRespond => !source.Task.IsCompleted;
 
-    public void Except(Exception exception) =>
-        source.SetException(ExceptionDispatchInfo.SetCurrentStackTrace(exception));
+    public void SendResponse(CompositeBuffer bytes) => source.SetResult(bytes);
 
-    public void Cancel() => source.SetCanceled();
-}
-
-public abstract record class WebConnectionFeed
-{
-    private WebConnectionFeed() { }
-
-    public sealed record class Receive : WebConnectionFeed
-    {
-        public required Packet Packet;
-    }
-
-    public sealed record class Send : WebConnectionFeed
-    {
-        public required Packet Packet;
-    }
-
-    public sealed record class Error : WebConnectionFeed
-    {
-        public required ExceptionDispatchInfo ExceptionDispatchInfo;
-    }
-
-    public sealed record class Done : WebConnectionFeed;
-}
-
-public sealed class WebConnectionContent
-{
-    public required ulong Code;
-    public required CompositeBuffer Data;
-}
-
-public abstract record class Packet
-{
-    public required ulong Id;
-
-    public sealed record class Request : Packet
-    {
-        public required ulong Code;
-        public required byte[] Data;
-    }
-
-    public sealed record class RequestCancel : Packet;
-
-    public sealed record class Response : Packet
-    {
-        public required ulong Code;
-        public required byte[] Data;
-    }
-
-    public sealed record class ResponseCancel : Packet;
-
-    public sealed record class ResponseError : Packet
-    {
-        public required byte[] Data;
-        public required bool IsManuallyThrown;
-    }
-
-    public sealed record class ResponseInternalError : Packet
-    {
-        public required ResponseInternalErrorReason Reason;
-    }
-
-    public enum ResponseInternalErrorReason : byte
-    {
-        Unknown,
-        InvalidId,
-        SendFailure
-    }
-
-    public static Packet Deserialize(CompositeBuffer buffer)
-    {
-        PacketType packetType = (PacketType)buffer[0];
-        CompositeBuffer packetData = buffer.Slice(1);
-
-        using MemoryStream stream = new(packetData.ToByteArray());
-        using BsonBinaryReader reader = new(stream);
-
-        return packetType switch
-        {
-            PacketType.Request => BsonSerializer.Deserialize<Request>(reader),
-            PacketType.RequestCancel => BsonSerializer.Deserialize<RequestCancel>(reader),
-            PacketType.Response => BsonSerializer.Deserialize<Response>(reader),
-            PacketType.ResponseCancel => BsonSerializer.Deserialize<ResponseCancel>(reader),
-            PacketType.ResponseError => BsonSerializer.Deserialize<ResponseError>(reader),
-            PacketType.ResponseInternalError
-                => BsonSerializer.Deserialize<ResponseInternalError>(reader),
-
-            _ => throw new InvalidPacketDeserializationException(packetType, packetData)
-        };
-    }
-
-    public static CompositeBuffer Serialize(Packet packet)
-    {
-        using MemoryStream stream = new();
-        using BsonBinaryWriter writer = new(stream);
-
-        PacketType packetType;
-
-        switch (packet)
-        {
-            case Request typed:
-                packetType = PacketType.Request;
-                BsonSerializer.Serialize(writer, typed);
-                break;
-
-            case RequestCancel typed:
-                packetType = PacketType.RequestCancel;
-                BsonSerializer.Serialize(writer, typed);
-                break;
-
-            case Response typed:
-                packetType = PacketType.Response;
-                BsonSerializer.Serialize(writer, typed);
-                break;
-
-            case ResponseCancel typed:
-                packetType = PacketType.ResponseCancel;
-                BsonSerializer.Serialize(writer, typed);
-                break;
-
-            case ResponseError typed:
-                packetType = PacketType.ResponseError;
-                BsonSerializer.Serialize(writer, typed);
-                break;
-
-            case ResponseInternalError typed:
-                packetType = PacketType.ResponseInternalError;
-                BsonSerializer.Serialize(writer, typed);
-                break;
-
-            default:
-                throw new InvalidPacketSerializationException(packet);
-        }
-
-        return CompositeBuffer.Concat(new byte[] { (byte)packetType }, stream.ToArray());
-    }
-
-    private Packet() { }
-}
-
-public delegate Task<WebConnectionContent> WebConnectionRequestHandler(
-    WebConnectionContent content,
-    CancellationToken cancellationToken
-);
-
-public sealed class WebConnection(WebSocket webSocket, WebConnectionOptions options)
-    : Service2<WebConnectionContext>(options.Name, options.Logger)
-{
-    private async Task<Packet?> Receive(CancellationToken cancellationToken)
-    {
-        WebSocketReceiveResult? result = null;
-
-        try
-        {
-            CompositeBuffer packet = [];
-
-            while (true)
-            {
-                byte[] buffer = new byte[4096];
-                result = await webSocket.ReceiveAsync(buffer, cancellationToken);
-
-                packet.Append(buffer, 0, result.Count);
-                if (result.EndOfMessage)
-                {
-                    break;
-                }
-            }
-
-            return Packet.Deserialize(packet);
-        }
-        finally
-        {
-            if (result == null || result.CloseStatus != null)
-            {
-                await Context.Feed.Enqueue(new WebConnectionFeed.Done(), CancellationToken.None);
-            }
-        }
-    }
-
-    private Task Send(Packet packet) =>
-        webSocket.SendAsync(
-            Packet.Serialize(packet).ToByteArray(),
-            WebSocketMessageType.Binary,
-            true,
-            CancellationToken.None
+    public void SendErrorResponse(CompositeBuffer bytes) =>
+        source.SetException(
+            ExceptionDispatchInfo.SetCurrentStackTrace(new WebConnectionResponseException(bytes))
         );
 
-    protected override Task<WebConnectionContext> OnStart(CancellationToken cancellationToken) =>
-        Task.FromResult<WebConnectionContext>(
-            new()
-            {
-                IncomingRequests = new(),
-                IncomingResponses = new(),
+    public void SendCancelResponse() => source.SetCanceled();
+}
 
-                Feed = new(),
-                Requests = new(),
+public class WebConnection(WebSocket webSocket, WebConnectionOptions options)
+    : Service<WebConnection.WebConnectionContext>(options.Name, options.Logger)
+{
+    public record class WebConnectionContext
+    {
+        public required ConcurrentDictionary<
+            uint,
+            CancellationTokenSource
+        > RequestCancellationTokenSources;
+        public required ConcurrentDictionary<
+            uint,
+            TaskCompletionSource<CompositeBuffer>
+        > ResponseTaskCompletionSources;
 
-                NextRequestId = 0
-            }
-        );
+        public required bool ReceiveDone;
+        public required WaitQueue<WebConnectionRequest?> Requests;
+        public required WaitQueue<WorkerFeed> Feed;
 
-    protected override async Task OnRun(
+        public required uint NextRequestId;
+    }
+
+    public abstract record WorkerFeed
+    {
+        private WorkerFeed() { }
+
+        public sealed record Send(CompositeBuffer Bytes) : WorkerFeed;
+
+        public sealed record Receive(CompositeBuffer Bytes) : WorkerFeed;
+
+        public sealed record ReceiveDone() : WorkerFeed;
+
+        public sealed record SendDone() : WorkerFeed;
+
+        public sealed record Error(Exception Exception) : WorkerFeed;
+    }
+
+    private const byte PACKET_REQUEST = 0;
+    private const byte PACKET_REQUEST_CANCEL = 1;
+    private const byte PACKET_RESPONSE = 2;
+    private const byte PACKET_RESPONSE_CANCEL = 3;
+    private const byte PACKET_RESPONSE_ERROR = 4;
+    private const byte PACKET_RESPONSE_INTERNAL_ERROR = 5;
+
+    private const byte INTERNAL_ERROR_DUPLICATE_ID = 0;
+
+    private async Task<CompositeBuffer?> Receive(
         WebConnectionContext context,
         CancellationToken cancellationToken
     )
     {
-        List<Task> tasks = [];
+        if (context.ReceiveDone)
         {
-            tasks.Add(Task.Delay(-1, cancellationToken));
-            tasks.Add(RunReceiveLoop(context.Feed, cancellationToken));
-            tasks.Add(RunWorker(context, context.Feed));
-
-            await await Task.WhenAny(tasks);
+            return null;
         }
 
-        await Task.WhenAll(tasks);
+        WebSocketReceiveResult? result = null;
+
+        try
+        {
+            CompositeBuffer bytes = [];
+
+            while (true)
+            {
+                while (true)
+                {
+                    byte[] buffer = new byte[4056];
+                    result = await webSocket.ReceiveAsync(buffer, cancellationToken);
+                    bytes.Append(buffer, 0, result.Count);
+
+                    if (result.EndOfMessage)
+                    {
+                        break;
+                    }
+                }
+
+                if (bytes.Length > 0)
+                {
+                    break;
+                }
+            }
+            return bytes;
+        }
+        catch { }
+        finally
+        {
+            if (result == null || result.CloseStatus != null)
+            {
+                context.ReceiveDone = true;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task Send(CompositeBuffer bytes, CancellationToken cancellationToken)
+    {
+        await webSocket.SendAsync(
+            bytes.ToByteArray(),
+            WebSocketMessageType.Binary,
+            true,
+            cancellationToken
+        );
+    }
+
+    protected override Task<WebConnectionContext> OnStart(
+        CancellationToken startupCancellationToken,
+        CancellationToken serviceCancellationToken
+    )
+    {
+        WebConnectionContext context =
+            new()
+            {
+                RequestCancellationTokenSources = new(),
+                ResponseTaskCompletionSources = new(),
+
+                ReceiveDone = false,
+                Requests = new(),
+                Feed = new(),
+
+                NextRequestId = 0,
+            };
+
+        return Task.FromResult(context);
+    }
+
+    protected override Task OnStop(WebConnectionContext context, ExceptionDispatchInfo? exception)
+    {
+        foreach (CancellationTokenSource source in context.RequestCancellationTokenSources.Values)
+        {
+            try
+            {
+                source.Cancel();
+            }
+            catch { }
+        }
+
+        foreach (
+            TaskCompletionSource<CompositeBuffer> source in context
+                .ResponseTaskCompletionSources
+                .Values
+        )
+        {
+            try
+            {
+                source.SetCanceled();
+            }
+            catch { }
+        }
+
+        return base.OnStop(context, exception);
+    }
+
+    protected override async Task OnRun(
+        WebConnectionContext context,
+        CancellationToken serviceCancellationToken
+    )
+    {
+        Task[] tasks =
+        [
+            Task.Delay(-1, serviceCancellationToken),
+            RunReceiveLoop(context, serviceCancellationToken),
+            RunWorker(context, serviceCancellationToken)
+        ];
+
+        await Task.WhenAny(tasks);
+        WaitTasksBeforeStopping.AddRange(tasks);
     }
 
     private async Task RunReceiveLoop(
-        WaitQueue<WebConnectionFeed> waitQueue,
+        WebConnectionContext context,
         CancellationToken cancellationToken
     )
     {
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Packet? packet = await Receive(cancellationToken);
 
-            if (packet == null)
+            CompositeBuffer? buffer = await Receive(context, cancellationToken);
+
+            if (buffer == null)
             {
+                await context.Feed.Enqueue(new WorkerFeed.ReceiveDone(), cancellationToken);
                 return;
             }
 
-            await waitQueue.Enqueue(
-                new WebConnectionFeed.Receive() { Packet = packet },
-                CancellationToken.None
-            );
+            await context.Feed.Enqueue(new WorkerFeed.Receive(buffer), cancellationToken);
         }
     }
 
-    private async Task RunWorker(WebConnectionContext context, WaitQueue<WebConnectionFeed> feed)
+    private async Task RunWorker(WebConnectionContext context, CancellationToken cancellationToken)
     {
-        await foreach (WebConnectionFeed feedEntry in feed)
+        List<Task> tasks = [];
+
+        try
         {
-            if (feedEntry is WebConnectionFeed.Receive receive)
+            await foreach (WorkerFeed feed in context.Feed.WithCancellation(cancellationToken))
             {
-                Debug($"<- {receive.Packet}", "Receive Loop");
-                async void handle()
+                switch (feed)
                 {
-                    try
+                    case WorkerFeed.Send(CompositeBuffer bytes):
+                        await Send(bytes, cancellationToken);
+                        break;
+
+                    case WorkerFeed.Receive(CompositeBuffer bytes):
                     {
-                        await HandleReceivedPacket(context, feed, receive);
-                    }
-                    catch (Exception exception)
-                    {
-                        await feed.Enqueue(
-                            new WebConnectionFeed.Error
+                        Task task = HandleReceivedPacket(context, bytes, cancellationToken);
+
+                        async Task monitor()
+                        {
+                            lock (tasks)
                             {
-                                ExceptionDispatchInfo = ExceptionDispatchInfo.Capture(exception),
+                                tasks.Add(task);
                             }
-                        );
+
+                            try
+                            {
+                                await task;
+                            }
+                            catch (Exception exception)
+                            {
+                                await context.Feed.Enqueue(
+                                    new WorkerFeed.Error(exception),
+                                    CancellationToken.None
+                                );
+                            }
+                            finally
+                            {
+                                lock (tasks)
+                                {
+                                    tasks.Remove(task);
+                                }
+                            }
+                        }
+
+                        _ = monitor();
+                        break;
                     }
+
+                    case WorkerFeed.ReceiveDone:
+                        context.ReceiveDone = true;
+
+                        await Task.WhenAll(tasks);
+                        await context.Feed.Enqueue(
+                            new WorkerFeed.SendDone(),
+                            CancellationToken.None
+                        );
+                        break;
+
+                    case WorkerFeed.SendDone:
+                        return;
+
+                    case WorkerFeed.Error(Exception exception):
+                        ExceptionDispatchInfo.Throw(exception);
+                        break;
                 }
+            }
+        }
+        finally
+        {
+            await context.Requests.Enqueue(null, CancellationToken.None);
 
-                handle();
-            }
-            else if (feedEntry is WebConnectionFeed.Send send)
+            if (tasks.Count > 0)
             {
-                Debug($"-> {send.Packet}", "Receive Loop");
-                await Send(send.Packet);
-            }
-            else if (feedEntry is WebConnectionFeed.Error error)
-            {
-                error.ExceptionDispatchInfo.Throw();
-            }
-            else if (feedEntry is WebConnectionFeed.Done)
-            {
-                Debug($"Done", "Receive Loop");
-                await context.Requests.Enqueue(null);
-
-                break;
+                await Task.WhenAll(tasks);
             }
         }
     }
 
     private async Task HandleReceivedPacket(
         WebConnectionContext context,
-        WaitQueue<WebConnectionFeed> waitQueue,
-        WebConnectionFeed.Receive receive
+        CompositeBuffer bytes,
+        CancellationToken cancellationToken
     )
     {
-        if (receive.Packet is Packet.Response response)
+        switch (bytes[0])
         {
-            if (
-                !context.IncomingResponses.TryRemove(
-                    response.Id,
-                    out TaskCompletionSource<WebConnectionContent>? incomingResponse
-                )
-            )
+            case PACKET_REQUEST:
             {
-                return;
-            }
+                using CancellationTokenSource cancellationTokenSource =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                uint id = bytes.Slice(1, 5).ToUInt32();
 
-            incomingResponse.SetResult(
-                new WebConnectionContent() { Code = response.Code, Data = response.Data }
-            );
-        }
-        else if (receive.Packet is Packet.ResponseCancel responseCancel)
-        {
-            if (
-                !context.IncomingResponses.TryRemove(
-                    responseCancel.Id,
-                    out TaskCompletionSource<WebConnectionContent>? incomingResponse
-                )
-            )
-            {
-                return;
-            }
+                if (!context.RequestCancellationTokenSources.TryAdd(id, cancellationTokenSource))
+                {
+                    await context.Feed.Enqueue(
+                        new WorkerFeed.Send(
+                            CompositeBuffer.Concat(
+                                PACKET_RESPONSE_INTERNAL_ERROR,
+                                id,
+                                INTERNAL_ERROR_DUPLICATE_ID
+                            )
+                        ),
+                        CancellationToken.None
+                    );
+                    break;
+                }
 
-            incomingResponse.SetCanceled(default);
-        }
-        else if (receive.Packet is Packet.ResponseError responseError)
-        {
-            if (
-                !context.IncomingResponses.TryRemove(
-                    responseError.Id,
-                    out TaskCompletionSource<WebConnectionContent>? incomingResponse
-                )
-            )
-            {
-                return;
-            }
+                CompositeBuffer result;
 
-            incomingResponse.SetException(
-                ExceptionDispatchInfo.SetCurrentStackTrace(
-                    new WebConnectionResponseException(
-                        responseError.Data,
-                        responseError.IsManuallyThrown
-                    )
-                )
-            );
-        }
-        else if (receive.Packet is Packet.ResponseInternalError internalResponseError)
-        {
-            if (
-                !context.IncomingResponses.TryRemove(
-                    internalResponseError.Id,
-                    out TaskCompletionSource<WebConnectionContent>? incomingResponse
-                )
-            )
-            {
-                return;
-            }
-
-            incomingResponse.SetException(
-                ExceptionDispatchInfo.SetCurrentStackTrace(
-                    new WebConnectionInternalResponse(internalResponseError.Reason)
-                )
-            );
-        }
-        else if (receive.Packet is Packet.Request request)
-        {
-            using CancellationTokenSource requestCancellationTokenSource = new();
-
-            if (!context.IncomingRequests.TryAdd(request.Id, requestCancellationTokenSource))
-            {
-                await waitQueue.Enqueue(
-                    new WebConnectionFeed.Send
-                    {
-                        Packet = new Packet.ResponseInternalError
-                        {
-                            Id = request.Id,
-                            Reason = Packet.ResponseInternalErrorReason.InvalidId
-                        },
-                    }
-                );
-
-                return;
-            }
-
-            try
-            {
-                WebConnectionContent content;
-
+                TaskCompletionSource<CompositeBuffer> taskCompletionSource = new();
                 try
                 {
-                    TaskCompletionSource<WebConnectionContent> source = new();
-
-                    await context.Requests.Enqueue(
-                        new(source)
+                    WebConnectionRequest request =
+                        new(taskCompletionSource)
                         {
-                            Request = new WebConnectionContent()
-                            {
-                                Code = request.Code,
-                                Data = request.Data,
-                            },
+                            Data = bytes.Slice(5),
+                            CancellationToken = cancellationTokenSource.Token
+                        };
 
-                            CancellationToken = requestCancellationTokenSource.Token
-                        }
-                    );
+                    await context.Requests.Enqueue(request, cancellationToken);
 
-                    content = await source.Task;
+                    result = await taskCompletionSource.Task;
                 }
                 catch (Exception exception)
                 {
-                    if (
-                        exception is OperationCanceledException operationCanceledException
-                        && operationCanceledException.CancellationToken
-                            == requestCancellationTokenSource.Token
-                    )
+                    if (taskCompletionSource.Task.IsCanceled)
                     {
-                        await waitQueue.Enqueue(
-                            new WebConnectionFeed.Send
-                            {
-                                Packet = new Packet.ResponseCancel { Id = request.Id }
-                            }
+                        await context.Feed.Enqueue(
+                            new WorkerFeed.Send(CompositeBuffer.Concat(PACKET_RESPONSE_CANCEL, id)),
+                            CancellationToken.None
                         );
                     }
                     else
                     {
-                        CompositeBuffer errorData;
-                        bool isManuallyThrown;
+                        CompositeBuffer buffer = CompositeBuffer.Concat(
+                            exception is WebConnectionResponseException responseException
+                                ? responseException.ErrorData
+                                : exception.Message
+                        );
 
-                        if (exception is WebConnectionResponseException webException)
-                        {
-                            errorData = webException.ErrorData;
-                            isManuallyThrown = true;
-                        }
-                        else
-                        {
-                            errorData = [];
-                            isManuallyThrown = false;
-                        }
-
-                        await waitQueue.Enqueue(
-                            new WebConnectionFeed.Send
-                            {
-                                Packet = new Packet.ResponseError
-                                {
-                                    Id = request.Id,
-                                    Data = errorData.ToByteArray(),
-                                    IsManuallyThrown = isManuallyThrown
-                                }
-                            }
+                        await context.Feed.Enqueue(
+                            new WorkerFeed.Send(
+                                CompositeBuffer.Concat(PACKET_RESPONSE_ERROR, id, buffer)
+                            ),
+                            CancellationToken.None
                         );
                     }
-                    return;
+
+                    break;
                 }
 
-                await waitQueue.Enqueue(
-                    new WebConnectionFeed.Send
-                    {
-                        Packet = new Packet.Response()
-                        {
-                            Id = request.Id,
-                            Code = content.Code,
-                            Data = content.Data.ToByteArray()
-                        }
-                    }
+                await context.Feed.Enqueue(
+                    new WorkerFeed.Send(CompositeBuffer.Concat(PACKET_RESPONSE, id, result)),
+                    cancellationToken
                 );
-            }
-            finally
-            {
-                context.IncomingRequests.TryRemove(request.Id, out _);
-            }
-        }
-        else if (receive.Packet is Packet.RequestCancel requestCancel)
-        {
-            if (
-                !context.IncomingRequests.TryRemove(
-                    requestCancel.Id,
-                    out CancellationTokenSource? requestCancellationToken
-                )
-            )
-            {
-                return;
+
+                context.RequestCancellationTokenSources.TryRemove(id, out _);
+                break;
             }
 
-            requestCancellationToken.Cancel();
+            case PACKET_REQUEST_CANCEL:
+            {
+                uint id = bytes.Slice(1, 5).ToUInt32();
+
+                if (
+                    !context.RequestCancellationTokenSources.TryRemove(
+                        id,
+                        out CancellationTokenSource? source
+                    )
+                )
+                {
+                    break;
+                }
+
+                try
+                {
+                    source.Cancel();
+                }
+                catch { }
+
+                break;
+            }
+
+            case PACKET_RESPONSE:
+            {
+                uint id = bytes.Slice(1, 5).ToUInt32();
+
+                if (
+                    !context.ResponseTaskCompletionSources.TryRemove(
+                        id,
+                        out TaskCompletionSource<CompositeBuffer>? source
+                    )
+                )
+                {
+                    break;
+                }
+
+                source.SetResult(bytes.Slice(5));
+                break;
+            }
+
+            case PACKET_RESPONSE_CANCEL:
+            {
+                uint id = bytes.Slice(1, 5).ToUInt32();
+
+                if (
+                    !context.ResponseTaskCompletionSources.TryRemove(
+                        id,
+                        out TaskCompletionSource<CompositeBuffer>? source
+                    )
+                )
+                {
+                    break;
+                }
+
+                source.SetCanceled(CancellationToken.None);
+                break;
+            }
+
+            case PACKET_RESPONSE_ERROR:
+            {
+                uint id = bytes.Slice(1, 5).ToUInt32();
+
+                if (
+                    !context.ResponseTaskCompletionSources.TryRemove(
+                        id,
+                        out TaskCompletionSource<CompositeBuffer>? source
+                    )
+                )
+                {
+                    break;
+                }
+
+                source.SetException(
+                    ExceptionDispatchInfo.SetCurrentStackTrace(
+                        new WebConnectionResponseException(bytes.Slice(5))
+                    )
+                );
+
+                break;
+            }
+
+            case PACKET_RESPONSE_INTERNAL_ERROR:
+            {
+                uint id = bytes.Slice(1, 5).ToUInt32();
+
+                if (
+                    !context.ResponseTaskCompletionSources.TryRemove(
+                        id,
+                        out TaskCompletionSource<CompositeBuffer>? source
+                    )
+                )
+                {
+                    break;
+                }
+
+                source.SetException(
+                    ExceptionDispatchInfo.SetCurrentStackTrace(
+                        new WebConnectionInternalResponseException(bytes[5])
+                    )
+                );
+
+                break;
+            }
         }
     }
 
-    public Task<WebConnectionRequest?> ReceiveRequest(CancellationToken cancellationToken) =>
-        Context.Requests.Dequeue(cancellationToken);
-
-    public async Task<WebConnectionContent> SendRequest(
-        WebConnectionContent content,
-        CancellationToken cancellationToken = default
+    public async Task<CompositeBuffer> SendRequest(
+        CompositeBuffer bytes,
+        CancellationToken cancellationToken
     )
     {
+        WebConnectionContext context = GetContext();
+
         while (true)
         {
-            TaskCompletionSource<WebConnectionContent> source = new();
-            ulong requestId = Context.NextRequestId++;
+            TaskCompletionSource<CompositeBuffer> source = new();
+            uint id = unchecked(context.NextRequestId++);
 
-            if (!Context.IncomingResponses.TryAdd(requestId, source))
+            if (!context.ResponseTaskCompletionSources.TryAdd(id, source))
             {
                 continue;
             }
 
-            async void waitCancellation()
+            await context.Feed.Enqueue(
+                new WorkerFeed.Send(CompositeBuffer.Concat(PACKET_REQUEST, id, bytes)),
+                cancellationToken
+            );
+
+            async void cancel()
             {
                 await cancellationToken.GetTask();
 
-                await Context.Feed.Enqueue(
-                    new WebConnectionFeed.Send
+                if (!source.Task.IsCompleted)
+                {
+                    try
                     {
-                        Packet = new Packet.RequestCancel { Id = requestId }
-                    },
-                    CancellationToken.None
-                );
+                        await context.Feed.Enqueue(
+                            new WorkerFeed.Send(CompositeBuffer.Concat(PACKET_REQUEST_CANCEL, id)),
+                            CancellationToken.None
+                        );
+                    }
+                    catch (Exception exception)
+                    {
+                        source.TrySetException(exception);
+                    }
+                }
             }
 
-            waitCancellation();
+            cancel();
 
-            await Context.Feed.Enqueue(
-                new WebConnectionFeed.Send
+            try
+            {
+                return await source.Task;
+            }
+            catch (Exception exception)
+            {
+                if (exception is WebConnectionInternalResponseException a)
                 {
-                    Packet = new Packet.Request
+                    if (a.Reason == INTERNAL_ERROR_DUPLICATE_ID)
                     {
-                        Id = requestId,
-                        Code = content.Code,
-                        Data = content.Data.ToByteArray()
+                        continue;
                     }
-                },
-                CancellationToken.None
-            );
+                }
 
-            return await source.Task;
+                throw;
+            }
         }
+    }
+
+    public async Task<WebConnectionRequest?> ReceiveRequest(CancellationToken cancellationToken)
+    {
+        WebConnectionContext context = GetContext();
+
+        if (context.ReceiveDone)
+        {
+            return null;
+        }
+
+        using CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            GetCancellationToken()
+        );
+
+        return await context.Requests.Dequeue(source.Token);
     }
 }
 
 public abstract class WebConnectionException(string? message, Exception? inner = null)
     : Exception(message, inner);
 
-public sealed class InvalidPacketDeserializationException(
-    PacketType packetType,
-    CompositeBuffer packetData,
-    Exception? inner = null
-)
-    : WebConnectionException(
-        $"Invalid serialization packet: 0x{Convert.ToString((byte)packetType, 16)}",
-        inner
-    )
-{
-    public readonly PacketType PacketType = packetType;
-    public readonly CompositeBuffer PacketData = packetData;
-}
-
-public sealed class InvalidPacketSerializationException(Packet packet, Exception? inner = null)
-    : WebConnectionException($"Invalid serialization packet: {packet}", inner)
-{
-    public readonly Packet Packet = packet;
-}
-
 public sealed class WebConnectionResponseException : WebConnectionException
 {
-    internal WebConnectionResponseException(
-        CompositeBuffer errorData,
-        bool isManuallyThrown,
-        Exception? inner = null
-    )
+    public WebConnectionResponseException(CompositeBuffer errorData, Exception? inner = null)
         : base($"Remote returned an error.", inner)
     {
         ErrorData = errorData;
-        IsManuallyThrown = isManuallyThrown;
     }
 
-    public WebConnectionResponseException(CompositeBuffer errorData, Exception? inner = null)
-        : this(errorData, true, inner) { }
-
     public readonly CompositeBuffer ErrorData;
-    public readonly bool IsManuallyThrown;
 }
 
-public sealed class WebConnectionInternalResponse(
-    Packet.ResponseInternalErrorReason reason,
-    Exception? inner = null
-) : WebConnectionException($"Remote returned an internal error.", inner)
+public sealed class WebConnectionInternalResponseException : WebConnectionException
 {
-    public readonly Packet.ResponseInternalErrorReason Reason = reason;
+    internal WebConnectionInternalResponseException(byte reason, Exception? inner = null)
+        : base($"Remote returned an internal error.", inner)
+    {
+        Reason = reason;
+    }
+
+    public readonly byte Reason;
 }
