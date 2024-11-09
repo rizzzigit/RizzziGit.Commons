@@ -1,9 +1,9 @@
 namespace RizzziGit.Commons.Services;
 
-public abstract partial class Service2<C>
+public abstract partial class Service<C>
 {
     protected async Task WatchService(
-        IService2 service,
+        IService service,
         CancellationToken cancellationToken = default
     )
     {
@@ -37,7 +37,7 @@ public abstract partial class Service2<C>
 
         lock (this)
         {
-            task = serviceContext?.Task ?? Task.CompletedTask;
+            task = internalContext?.Task ?? Task.CompletedTask;
         }
 
         try

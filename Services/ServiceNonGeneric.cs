@@ -1,27 +1,30 @@
 namespace RizzziGit.Commons.Services;
 
+using System.Runtime.ExceptionServices;
 using Logging;
 
-public abstract class Service2 : Service2<object>
+public abstract class Service : Service<object>
 {
-    protected Service2(string name, IService2 downstream)
+    protected Service(string name, IService downstream)
         : base(name, downstream) { }
 
-    protected Service2(string name, Logger? downstream = null)
+    protected Service(string name, Logger? downstream = null)
         : base(name, downstream) { }
 
     protected virtual Task OnRun(CancellationToken cancellationToken) =>
         Task.Delay(-1, cancellationToken);
 
-    protected virtual Task OnStop(Exception? exception) => Task.CompletedTask;
+    protected virtual Task OnStop(ExceptionDispatchInfo? exception) => Task.CompletedTask;
 
     protected sealed override Task OnRun(object context, CancellationToken cancellationToken) =>
         OnRun(cancellationToken);
 
-    protected sealed override Task<object> OnStart(CancellationToken cancellationToken) =>
-        Task.FromResult(new object());
+    protected sealed override Task<object> OnStart(
+        CancellationToken startupCancellationToken,
+        CancellationToken serviceCancellationToken
+    ) => Task.FromResult(new object());
 
-    protected sealed override Task OnStop(object context, Exception? exception) =>
+    protected sealed override Task OnStop(object context, ExceptionDispatchInfo? exception) =>
         OnStop(exception);
 
     public new async Task Start(CancellationToken cancellationToken = default) =>

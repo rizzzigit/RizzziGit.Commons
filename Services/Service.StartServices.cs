@@ -2,17 +2,17 @@ using System.Runtime.ExceptionServices;
 
 namespace RizzziGit.Commons.Services;
 
-public abstract partial class Service2<C>
+public abstract partial class Service<C>
 {
     public static async Task StartServices(
-        IService2[] services,
+        IService[] services,
         CancellationToken cancellationToken = default
     )
     {
-        List<IService2> startedServices = [];
+        List<IService> startedServices = [];
         try
         {
-            foreach (IService2 service in services)
+            foreach (IService service in services)
             {
                 await service.Start(cancellationToken);
 
@@ -21,9 +21,9 @@ public abstract partial class Service2<C>
         }
         catch (Exception exception)
         {
-            List<ExceptionDispatchInfo> stopExceptions = [];
+            List<Exception> stopExceptions = [];
 
-            foreach (IService2 service in services)
+            foreach (IService service in startedServices.Reverse<IService>())
             {
                 try
                 {
@@ -31,7 +31,7 @@ public abstract partial class Service2<C>
                 }
                 catch (Exception stopException)
                 {
-                    stopExceptions.Add(ExceptionDispatchInfo.Capture(stopException));
+                    stopExceptions.Add(stopException);
                 }
             }
 
@@ -40,9 +40,7 @@ public abstract partial class Service2<C>
                 throw;
             }
 
-            throw new AggregateException(
-                [exception, .. stopExceptions.Select((exception) => exception.SourceException)]
-            );
+            throw new AggregateException([exception, .. stopExceptions]);
         }
     }
 }

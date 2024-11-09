@@ -2,13 +2,13 @@ using System.Runtime.ExceptionServices;
 
 namespace RizzziGit.Commons.Services;
 
-public abstract partial class Service2<C>
+public abstract partial class Service<C>
 {
-    public static async Task StopServices(params IService2[] services)
+    public static async Task StopServices(params IService[] services)
     {
         List<ExceptionDispatchInfo> stopExceptions = [];
 
-        foreach (IService2 service in services)
+        foreach (IService service in services)
         {
             try
             {
