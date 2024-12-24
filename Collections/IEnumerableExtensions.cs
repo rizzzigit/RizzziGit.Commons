@@ -1,4 +1,4 @@
-﻿namespace RizzziGit.Commons.Extensions;
+﻿namespace RizzziGit.Commons.Collections;
 
 public static class IEnumerableExtensions
 {

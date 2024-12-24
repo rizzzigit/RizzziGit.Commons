@@ -1,6 +1,6 @@
 namespace RizzziGit.Commons.Memory;
 
-using Extensions;
+using Collections;
 
 public sealed partial class CompositeBuffer
 {

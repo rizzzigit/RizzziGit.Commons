@@ -140,6 +140,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
             int start = range.Start.GetOffset(size);
             int end = range.End.GetOffset(size);
 
+
             return Slice(start, end);
         }
         set

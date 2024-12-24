@@ -37,7 +37,7 @@ public sealed partial class CompositeBuffer
             StringEncoding.Hex => ToHexString(),
             StringEncoding.Base64 => ToBase64String(),
 
-            _ => throw new InvalidOperationException($"Unknown encoding: {encoding}")
+            _ => throw new InvalidOperationException($"Unknown encoding: {encoding}"),
         };
     }
 
@@ -72,6 +72,34 @@ public sealed partial class CompositeBuffer
             return false;
         }
 
-        return ToByteArray().SequenceEqual(target.ToByteArray());
+        if (ReferenceEquals(Blocks, target.Blocks))
+        {
+            return true;
+        }
+
+        if (target.Blocks.Count != Blocks.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < Blocks.Count; index++)
+        {
+            if (ReferenceEquals(Blocks[index], target.Blocks[index]))
+            {
+                continue;
+            }
+
+            if (Blocks[index].Length != target.Blocks[index].Length)
+            {
+                return false;
+            }
+
+            if (!Blocks[index].SequenceEqual(target.Blocks[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
