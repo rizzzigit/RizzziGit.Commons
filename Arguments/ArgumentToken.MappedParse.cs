@@ -4,16 +4,14 @@ public sealed record ArgumentMap(OrdinalArgumentSet[] OrdinalSets, string[]? Res
 
 public sealed record OrdinalArgumentSet(OrdinalArgumentTag[] Tags, string? OrdinalValue);
 
-public abstract record OrdinalArgumentTag
+public abstract record OrdinalArgumentTag(string? Value)
 {
-    private OrdinalArgumentTag() { }
-
-    public sealed record KeyValuePair(string Key, string? Value) : OrdinalArgumentTag
+    public sealed record KeyValuePair(string Key, string? Value) : OrdinalArgumentTag(Value)
     {
         public override string ToString() => $"--{Key} {Value}";
     }
 
-    public sealed record ShorthandKeyValuePair(char Key, string? Value) : OrdinalArgumentTag
+    public sealed record ShorthandKeyValuePair(char Key, string? Value) : OrdinalArgumentTag(Value)
     {
         public override string ToString() => $"-{Key} {Value}";
     }
@@ -72,7 +70,8 @@ public partial record ArgumentToken
                     return new([.. sets], restArgument.Values);
                 }
 
-                default: throw new InvalidOperationException($"Invalid type: {token}");
+                default:
+                    throw new InvalidOperationException($"Invalid type: {token}");
             }
         }
 

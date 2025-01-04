@@ -13,10 +13,10 @@ public abstract partial record ArgumentToken
         TypedParserOptions options
     )
     {
-        TypedArgumentsMap typedMap = GenerateOrderedTypedMap(type);
-        ArgumentMap parsedMap = MappedParse(tokens);
-
         object instance = constructor.Invoke([]);
+
+        TypedArgumentsMap typedMap = GenerateOrderedTypedMap(type, instance);
+        ArgumentMap parsedMap = MappedParse(tokens);
 
         ApplyRest(typedMap.Rest, instance, parsedMap.Rest, options);
 
@@ -25,17 +25,19 @@ public abstract partial record ArgumentToken
             index < int.Max(typedMap.Sets.Length, parsedMap.OrdinalSets.Length);
             index++
         )
+        {
             ApplySet(
                 instance,
                 typedMap.Sets.ElementAtOrDefault(index),
                 parsedMap.OrdinalSets.ElementAtOrDefault(index),
                 options
             );
+        }
 
         return instance;
     }
 
-    private static TypedArgumentsMap GenerateOrderedTypedMap(Type type)
+    private static TypedArgumentsMap GenerateOrderedTypedMap(Type type, object instance)
     {
         List<TypedArgumentBinding<ArgumentAttribute>> tags = [];
         List<TypedOrdinalArgumentsSet> sets = [];
@@ -67,7 +69,7 @@ public abstract partial record ArgumentToken
             {
                 case OrdinalArgumentAttribute ordinalArgumentAttribute:
                 {
-                    sets.Add(new([.. tags], new(member, ordinalArgumentAttribute)));
+                    sets.Add(new([.. tags], new(instance, new(member), ordinalArgumentAttribute)));
                     tags = [];
                     break;
                 }
@@ -87,13 +89,13 @@ public abstract partial record ArgumentToken
                         );
                     }
 
-                    tags.Add(new(member, argumentAttribute));
+                    tags.Add(new(instance, new(member), argumentAttribute));
                     break;
                 }
 
                 case RestArgumentAttribute restArgumentAttribute:
                 {
-                    rest = new(member, restArgumentAttribute);
+                    rest = new(instance, new(member), restArgumentAttribute);
                     break;
                 }
             }

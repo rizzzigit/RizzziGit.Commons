@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace RizzziGit.Commons.Arguments;
 
 public partial record ArgumentToken
@@ -44,17 +46,12 @@ public partial record ArgumentToken
                 }
                 else
                 {
-                    SetPropertyOrFieldValue(typedOrdinalValue.Member, instance, true, null!);
+                    typedOrdinalValue.Value = null;
                 }
             }
             else
             {
-                SetPropertyOrFieldValue(
-                    typedOrdinalValue.Member,
-                    instance,
-                    true,
-                    parsedOrdinalValue
-                );
+                typedOrdinalValue.Value = parsedOrdinalValue;
             }
         }
     }
@@ -68,72 +65,91 @@ public partial record ArgumentToken
     {
         List<TypedArgumentBinding<ArgumentAttribute>> setTags = [];
 
-        foreach (OrdinalArgumentTag parsedTag in parsedTags)
+        foreach (var typedTag in typedTags)
         {
-            foreach (TypedArgumentBinding<ArgumentAttribute> typedTag in typedTags)
+            var result = parsedTags
+                .Where(
+                    (tag) =>
+                        (
+                            tag is OrdinalArgumentTag.KeyValuePair kvp
+                            && kvp.Key == typedTag.Attribute.Key
+                        )
+                        || (
+                            tag is OrdinalArgumentTag.ShorthandKeyValuePair skvp
+                            && skvp.Key == typedTag.Attribute.ShorthandKey
+                        )
+                )
+                .ToArray();
+
+            if (result.Length != 0)
             {
-                string toSet;
+                Type memberType = typedTag.GetPropertyOrFieldType();
 
-                switch (parsedTag)
+                object? toSet;
+
+                if (result.Length > 1)
                 {
-                    case OrdinalArgumentTag.KeyValuePair(string key, string value):
+                    if (!memberType.IsArray)
                     {
-                        if (typedTag.Attribute.Key != key)
-                        {
-                            if (!options.IgnoreUnknownArguments)
-                            {
-                                throw new InvalidOperationException($"Unexpected argument: {key}");
-                            }
-
-                            continue;
-                        }
-
-                        toSet = value;
-                        break;
-                    }
-
-                    case OrdinalArgumentTag.ShorthandKeyValuePair(char key, string value):
-                    {
-                        if (typedTag.Attribute.ShorthandKey != key)
-                        {
-                            if (!options.IgnoreUnknownArguments)
-                            {
-                                throw new InvalidOperationException(
-                                    $"Unexpected shorthand argument: {key}"
-                                );
-                            }
-
-                            continue;
-                        }
-
-                        toSet = value;
-                        break;
-                    }
-
-                    default:
                         throw new InvalidOperationException(
-                            $"Invalid type: {parsedTag.GetType().Name}"
+                            $"Multiple {typedTag} tags is not supported."
                         );
+                    }
+
+                    toSet = result
+                        .Select(
+                            (parsedTag) =>
+                                CastToType(parsedTag.Value!, memberType.GetElementType()!)
+                        )
+                        .ToArray();
+                }
+                else
+                {
+                    toSet = CastToType(result.First().Value!, memberType);
                 }
 
-                bool firstSet = !typedTags.Contains(typedTag);
-                SetPropertyOrFieldValue(typedTag.Member, instance, firstSet, toSet);
-
-                if (firstSet)
+                if (toSet is null && !typedTag.IsNullable)
                 {
-                    setTags.Add(typedTag);
+                    throw new InvalidOperationException(
+                        $"Parameter {typedTag.Attribute} requires a value."
+                    );
+                }
+
+                typedTag.Value = toSet;
+            }
+            else
+            {
+                if (typedTag.IsRequired || !typedTag.IsNullable)
+                {
+                    throw new InvalidOperationException(
+                        $"Required or non-nullable parameter is missing: {typedTag}"
+                    );
                 }
             }
         }
 
-        var unsetTags = typedTags.Except(typedTags).ToArray();
-
-        foreach (var tag in unsetTags)
+        if (!options.IgnoreUnknownArguments)
         {
-            if (tag.IsRequired || !tag.IsNullable)
+            var a = parsedTags
+                .Where(
+                    (e) =>
+                        !(
+                            (
+                                e is OrdinalArgumentTag.KeyValuePair kvp
+                                && typedTags.Any((tag) => kvp.Key == tag.Attribute.Key)
+                            )
+                            || (
+                                e is OrdinalArgumentTag.ShorthandKeyValuePair skvp
+                                && typedTags.Any((tag) => skvp.Key == tag.Attribute.ShorthandKey)
+                            )
+                        )
+                )
+                .ToArray();
+
+            if (a.Length != 0)
             {
                 throw new InvalidOperationException(
-                    $"Required or non-nullable argument is missing: {tag}"
+                    $"Unknown paramters: {string.Join(", ", a.Select((tag) => $"{tag}"))}"
                 );
             }
         }
@@ -166,12 +182,12 @@ public partial record ArgumentToken
                 }
                 else
                 {
-                    SetPropertyOrFieldValue(member.Member, instance, true, null!);
+                    member.Value = null!;
                 }
             }
             else
             {
-                SetPropertyOrFieldValue(member.Member, instance, true, values);
+                member.Value = values;
             }
         }
     }

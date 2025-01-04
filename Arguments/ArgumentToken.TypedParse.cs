@@ -2,6 +2,8 @@ using System.Reflection;
 
 namespace RizzziGit.Commons.Arguments;
 
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using Reflection;
 
 public enum ArgumentObjectMode
@@ -45,25 +47,81 @@ internal sealed record TypedOrdinalArgumentsSet(
     }
 }
 
-internal sealed record TypedArgumentBinding<T>(MemberInfo Member, T Attribute)
-    where T : BaseArgumentAttribute
+internal sealed record PropertyOrFieldInfoHolder(MemberInfo Member)
 {
-    private static bool IsMemberNullable(MemberInfo member)
+    [DoesNotReturn]
+    public Exception ThrowNotPropertyOrFieldException() =>
+        throw new InvalidOperationException($"Property {Member} is not a property nor a field.");
+
+    public string Name => Member.Name;
+
+    public bool IsRequired => Member.TryGetCustomAttribute<RequiredAttribute>(out _);
+
+    public bool IsNullable
     {
-        NullabilityInfoContext context = new();
+        get
+        {
+            NullabilityInfoContext context = new();
 
-        NullabilityInfo info =
-            member is FieldInfo f ? context.Create(f)
-            : member is PropertyInfo p ? context.Create(p)
-            : throw new InvalidOperationException(
-                $"Member {member.Name} is not an field nor a property."
-            );
+            NullabilityInfo info =
+                Member is PropertyInfo property ? context.Create(property)
+                : Member is FieldInfo f ? context.Create(f)
+                : throw ThrowNotPropertyOrFieldException();
 
-        return info.WriteState is NullabilityState.Nullable;
+            return info.WriteState is NullabilityState.Nullable;
+        }
     }
 
-    public bool IsRequired => Attribute is ArgumentAttribute attribute && !attribute.IsRequired;
-    public bool IsNullable => IsMemberNullable(Member);
+    public object? GetValue(object instance) =>
+        Member is PropertyInfo property ? property.GetValue(instance)
+        : Member is FieldInfo field ? field.FieldType
+        : throw ThrowNotPropertyOrFieldException();
+
+    public void SetValue(object instance, object? value)
+    {
+        if (Member is PropertyInfo property)
+        {
+            property.SetValue(instance, value);
+        }
+        else if (Member is FieldInfo field)
+        {
+            field.SetValue(instance, value);
+        }
+        else
+        {
+            throw ThrowNotPropertyOrFieldException();
+        }
+    }
+
+    public bool IsProperty([NotNullWhen(true)] out PropertyInfo? property) =>
+        (property = Member as PropertyInfo) is not null;
+
+    public bool IsField([NotNullWhen(true)] out FieldInfo? field) =>
+        (field = Member as FieldInfo) is not null;
+
+    public Type GetPropertyOrFieldType() =>
+        Member is PropertyInfo property ? property.PropertyType
+        : Member is FieldInfo field ? field.FieldType
+        : throw ThrowNotPropertyOrFieldException();
+}
+
+internal sealed record TypedArgumentBinding<T>(
+    object Instance,
+    PropertyOrFieldInfoHolder Member,
+    T Attribute
+)
+    where T : BaseArgumentAttribute
+{
+    public bool IsRequired => Member.IsRequired;
+    public bool IsNullable => Member.IsNullable;
+
+    public object? Value
+    {
+        get => Member.GetValue(Instance);
+        set => Member.SetValue(Instance, value);
+    }
+
+    public Type GetPropertyOrFieldType() => Member.GetPropertyOrFieldType();
 
     public override string ToString() =>
         Attribute switch
@@ -71,10 +129,10 @@ internal sealed record TypedArgumentBinding<T>(MemberInfo Member, T Attribute)
             ArgumentAttribute argument => $"{argument}",
 
             OrdinalArgumentAttribute ordinalArgument =>
-                $"{(IsRequired || !IsNullable ? $"<{ordinalArgument.Hint}>" : $"[{ordinalArgument.Hint}]")}",
+                $"{(IsRequired || (IsRequired && !IsNullable) ? $"<{ordinalArgument.Hint}>" : $"[{ordinalArgument.Hint}]")}",
 
             RestArgumentAttribute restArgument =>
-                $"{(IsRequired || !IsNullable ? $"<-- {restArgument.Hint}>" : $"[-- {restArgument.Hint}]")}",
+                $"{(IsRequired || (IsRequired && !IsNullable) ? $"<-- {restArgument.Hint}>" : $"[-- {restArgument.Hint}]")}",
 
             _ => throw new InvalidOperationException($"Invalid type: {Member}"),
         };
@@ -139,6 +197,7 @@ public partial record ArgumentToken
         return attribute.Mode switch
         {
             ArgumentObjectMode.Ordered => OrderedParse(type, constructor, tokens, options),
+            ArgumentObjectMode.Unordered => UnorderedParse(type, constructor, tokens, options),
             _ => throw new InvalidOperationException($"Invalid type: {attribute.Mode}"),
         };
     }
