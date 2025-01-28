@@ -197,7 +197,7 @@ public partial record ArgumentToken
         return attribute.Mode switch
         {
             ArgumentObjectMode.Ordered => OrderedParse(type, constructor, tokens, options),
-            ArgumentObjectMode.Unordered => UnorderedParse(type, constructor, tokens, options),
+            // ArgumentObjectMode.Unordered => UnorderedParse(type, constructor, tokens, options),
             _ => throw new InvalidOperationException($"Invalid type: {attribute.Mode}"),
         };
     }
