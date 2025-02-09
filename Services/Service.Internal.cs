@@ -1,5 +1,5 @@
-using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
+using RizzziGit.Commons.Utilities;
 
 namespace RizzziGit.Commons.Services;
 
@@ -14,6 +14,13 @@ public abstract partial class Service<C>
     {
         SetState(serviceContext, ServiceState.StartingUp);
 
+        void logError(Exception exception)
+        {
+            lastException = ExceptionDispatchInfo.Capture(exception);
+            ExceptionThrown?.Invoke(this, exception);
+            Fatal(exception.ToPrintable(), "Fatal Error");
+        }
+
         try
         {
             serviceContext.Context = new(
@@ -25,6 +32,8 @@ public abstract partial class Service<C>
         }
         catch (Exception exception)
         {
+            logError(exception);
+
             SetState(serviceContext, ServiceState.CrashingDown);
             SetState(serviceContext, ServiceState.Crashed);
 
@@ -40,6 +49,8 @@ public abstract partial class Service<C>
         }
         catch (Exception exception)
         {
+            logError(exception);
+
             SetState(serviceContext, ServiceState.CrashingDown);
 
             await StopInternal(
@@ -57,8 +68,10 @@ public abstract partial class Service<C>
 
             SetState(serviceContext, ServiceState.NotRunning);
         }
-        catch
+        catch (Exception exception)
         {
+            logError(exception);
+
             SetState(serviceContext, ServiceState.CrashingDown);
             SetState(serviceContext, ServiceState.Crashed);
             throw;

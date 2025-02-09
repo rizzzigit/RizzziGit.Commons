@@ -34,7 +34,6 @@ public abstract partial class Service<C>
     protected T Error<T>(T exception, string? scope = null)
         where T : Exception
     {
-        Console.Error.WriteLine(exception);
         Error(exception.ToPrintable(), scope);
 
         return exception;

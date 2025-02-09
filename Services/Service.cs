@@ -16,7 +16,12 @@ public enum ServiceState : byte
     Crashed,
 }
 
-public abstract partial class Service<C> : IService
+interface IServiceInternal : IService
+{
+    public Logger Logger { get; }
+}
+
+public abstract partial class Service<C> : IServiceInternal
     where C : notnull
 {
     private static TaskFactory? taskFactory;
@@ -27,8 +32,9 @@ public abstract partial class Service<C> : IService
             TaskContinuationOptions.LongRunning
         );
 
-    public Service(string name, IService downstream)
-        : this(name, downstream?.Logger) { }
+    public Service(string name, IService? downstream)
+        : this(name, downstream is IServiceInternal internalService ? internalService.Logger : null)
+    { }
 
     public Service(string name, Logger? downstream = null)
     {
@@ -54,7 +60,8 @@ public abstract partial class Service<C> : IService
     private ServiceInstance InternalContext =>
         internalContext ?? throw new InvalidOperationException("Service is not running.");
 
-    protected CancellationToken GetCancellationToken() => InternalContext.CancellationTokenSource.Token;
+    protected CancellationToken GetCancellationToken() =>
+        InternalContext.CancellationTokenSource.Token;
 
     protected C GetContext() =>
         (
@@ -72,7 +79,8 @@ public abstract partial class Service<C> : IService
     protected virtual Task OnRun(C context, CancellationToken serviceCancellationToken) =>
         Task.Delay(-1, serviceCancellationToken);
 
-    protected virtual Task OnStop(C context, ExceptionDispatchInfo? exception) => Task.CompletedTask;
+    protected virtual Task OnStop(C context, ExceptionDispatchInfo? exception) =>
+        Task.CompletedTask;
 
     private void SetState(ServiceInstance instance, ServiceState state)
     {
@@ -104,28 +112,14 @@ public abstract partial class Service<C> : IService
                         {
                             try
                             {
-                                try
-                                {
-                                    RunInternal(
-                                            initiation.Task.GetAwaiter().GetResult(),
-                                            startupCancellationToken,
-                                            startupTaskCompletionSource,
-                                            serviceCancellationTokenSource
-                                        )
-                                        .GetAwaiter()
-                                        .GetResult();
-                                }
-                                catch (Exception exception)
-                                {
-                                    lock (this)
-                                    {
-                                        lastException = ExceptionDispatchInfo.Capture(exception);
-                                        Fatal(exception.ToPrintable(), "Fatal Error");
-                                        ExceptionThrown?.Invoke(this, exception);
-                                    }
-
-                                    throw;
-                                }
+                                RunInternal(
+                                        initiation.Task.GetAwaiter().GetResult(),
+                                        startupCancellationToken,
+                                        startupTaskCompletionSource,
+                                        serviceCancellationTokenSource
+                                    )
+                                    .GetAwaiter()
+                                    .GetResult();
                             }
                             finally
                             {
@@ -140,7 +134,7 @@ public abstract partial class Service<C> : IService
                 CancellationTokenSource = serviceCancellationTokenSource,
                 State = ServiceState.NotRunning,
                 Context = null,
-                WaitTasksBeforeStopping = []
+                WaitTasksBeforeStopping = [],
             };
 
             initiation.SetResult(internalContext);
@@ -191,7 +185,8 @@ public abstract partial class Service<C> : IService
     }
 
     string IService.Name => Name;
-    Logger IService.Logger => logger;
+
+    Logger IServiceInternal.Logger => logger;
 
     Task IService.Watch(CancellationToken cancellationToken) => Watch(cancellationToken);
 
@@ -204,7 +199,6 @@ public interface IService
 {
     public string Name { get; }
     public ServiceState State { get; }
-    public Logger Logger { get; }
 
     public event EventHandler<Exception>? ExceptionThrown;
     public event EventHandler<ServiceState>? StateChanged;
