@@ -24,12 +24,12 @@
     <Description>RizzziGit's Common .NET Library.</Description>
     <Product>RizzziGit.Commons</Product>
     <Authors>RizzziGit</Authors>
-    <Version>0.0.7</Version>
+    <Version>0.0.8</Version>
 
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
-    <FileVersion>0.0.7</FileVersion>
+    <FileVersion>0.0.8</FileVersion>
     <RepositoryUrl>https://github.com/RizzziGit/RizzziGit.Commons</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>These updates might include breaking changes.</PackageReleaseNotes>
