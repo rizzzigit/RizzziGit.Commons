@@ -1,6 +1,13 @@
 namespace RizzziGit.Commons.Logging;
 
-public delegate void LoggerHandler(LogLevel level, string[] scope, string message, ulong timestamp);
+public delegate void LoggerHandler(Log Log);
+
+public sealed record Log(
+    LogLevel Level,
+    string[] Scope,
+    string Message,
+    DateTimeOffset UtcTimestamp
+);
 
 public enum LogLevel : byte
 {
@@ -8,7 +15,7 @@ public enum LogLevel : byte
     Error,
     Warn,
     Info,
-    Debug
+    Debug,
 }
 
 public static class LogLevelExtensions
@@ -54,11 +61,18 @@ public sealed class Logger(string name)
         }
     }
 
-    private void InternalLog(LogLevel level, string[] scope, string message, ulong timestamp)
+    private void InternalLog(
+        LogLevel level,
+        string[] scope,
+        string message,
+        DateTimeOffset timestamp
+    )
     {
         scope = [Name, .. scope];
 
-        Logged?.Invoke(level, scope, message, timestamp);
+        Log log = new(level, scope, message, timestamp);
+
+        Logged?.Invoke(log);
 
         foreach (Logger subscriber in SubscriberLoggers)
         {
@@ -73,7 +87,7 @@ public sealed class Logger(string name)
             throw new ArgumentOutOfRangeException(nameof(level));
         }
 
-        InternalLog(level, [], message, (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds());
+        InternalLog(level, [], message, DateTimeOffset.UtcNow);
     }
 
     public void Debug(string message) => Log(LogLevel.Debug, message);
