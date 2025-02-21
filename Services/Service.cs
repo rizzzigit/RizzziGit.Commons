@@ -43,8 +43,7 @@ public abstract partial class Service<C> : IServiceInternal
 
         downstream?.Subscribe(logger);
 
-        logger.Logged += (level, scope, message, timestamp) =>
-            Logged?.Invoke(level, scope, message, timestamp);
+        logger.Logged += (log) => Logged?.Invoke(log);
     }
 
     private ExceptionDispatchInfo? lastException;

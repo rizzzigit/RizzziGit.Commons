@@ -6,7 +6,9 @@ public sealed record Log(
     LogLevel Level,
     string[] Scope,
     string Message,
-    DateTimeOffset UtcTimestamp
+    DateTimeOffset UtcTimestamp,
+    string? ThreadName,
+    int ThreadId
 );
 
 public enum LogLevel : byte
@@ -70,7 +72,14 @@ public sealed class Logger(string name)
     {
         scope = [Name, .. scope];
 
-        Log log = new(level, scope, message, timestamp);
+        Log log = new(
+            level,
+            scope,
+            message,
+            timestamp,
+            Thread.CurrentThread.Name,
+            Environment.CurrentManagedThreadId
+        );
 
         Logged?.Invoke(log);
 
