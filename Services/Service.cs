@@ -83,7 +83,7 @@ public abstract partial class Service<C> : IServiceInternal
 
     private void SetState(ServiceInstance instance, ServiceState state)
     {
-        Info($"{instance.State} -> {instance.State = state}", "State");
+        Debug($"{instance.State} -> {instance.State = state}", "State");
         StateChanged?.Invoke(this, state);
     }
 
