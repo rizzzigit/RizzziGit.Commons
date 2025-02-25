@@ -111,6 +111,7 @@ public abstract partial class Service<C> : IServiceInternal
                         {
                             try
                             {
+                                Thread.CurrentThread.Name = $"{GetType().Name}: {Name}";
                                 RunInternal(
                                         initiation.Task.GetAwaiter().GetResult(),
                                         startupCancellationToken,
