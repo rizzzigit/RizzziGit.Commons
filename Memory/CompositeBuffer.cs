@@ -205,11 +205,6 @@ public static class CompositeBufferExtensions
         return seed;
     }
 
-    public static ValueTask<CompositeBuffer> ConcatAsync(
-        this IAsyncEnumerable<CompositeBuffer> bytes,
-        CancellationToken cancellationToken = default
-    ) => bytes.AggregateAsync(CompositeBuffer.Allocate(0), AppendInternal, cancellationToken);
-
     public static CompositeBuffer Concat(this IEnumerable<CompositeBuffer> bytes) =>
         bytes.Aggregate(CompositeBuffer.Allocate(0), AppendInternal);
 }
