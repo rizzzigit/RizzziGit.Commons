@@ -1,23 +1,12 @@
 using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
-using System.Runtime.ExceptionServices;
 
 namespace RizzziGit.Commons.Collections;
 
-public sealed class WaitQueue<T>(int? capacity = null)
-    : IDisposable,
-        IAsyncDisposable,
-        IAsyncEnumerable<T>
+public sealed class WaitQueue<T>(int? capacity = null) : IAsyncEnumerable<T>
 {
     private readonly ConcurrentQueue<T> Backlog = new();
     private readonly Queue<TaskCompletionSource<TaskCompletionSource<T>>> InsertQueue = new();
     private readonly Queue<TaskCompletionSource<T>> RemoveQueue = new();
-
-    private bool isDone = false;
-    private ExceptionDispatchInfo? exception;
-
-    public bool IsDone => isDone;
 
     public int? Capacity => capacity;
 
@@ -26,42 +15,12 @@ public sealed class WaitQueue<T>(int? capacity = null)
     public int RemoveQueueCount => RemoveQueue.Count;
     public int Count => BacklogCount + InsertQueueCount;
 
-    public void Dispose(Exception? exception = null)
-    {
-        lock (this)
-        {
-            if (isDone)
-            {
-                this.exception?.Throw();
-                throw new InvalidOperationException("Queue is already done.");
-            }
-
-            isDone = true;
-
-            if (exception != null)
-            {
-                this.exception = ExceptionDispatchInfo.Capture(exception);
-
-                while (RemoveQueue.TryDequeue(out var task))
-                {
-                    task.TrySetException(exception);
-                }
-            }
-        }
-    }
-
     public Task<T> Dequeue() => Dequeue(CancellationToken.None);
 
     public Task<T> Dequeue(CancellationToken cancellationToken)
     {
         lock (this)
         {
-            if (BacklogCount == 0 && InsertQueueCount == 0 && isDone)
-            {
-                exception?.Throw();
-                throw new InvalidOperationException("Queue is done.");
-            }
-
             TaskCompletionSource<T> source = new();
 
             while (true)
@@ -105,12 +64,6 @@ public sealed class WaitQueue<T>(int? capacity = null)
 
     public Task Enqueue(T item, CancellationToken cancellationToken)
     {
-        if (isDone)
-        {
-            exception?.Throw();
-            throw new InvalidOperationException("Queue is done.");
-        }
-
         TaskCompletionSource<TaskCompletionSource<T>>? insertSource = null;
 
         lock (this)
@@ -169,12 +122,6 @@ public sealed class WaitQueue<T>(int? capacity = null)
 
             lock (this)
             {
-                if (BacklogCount == 0 && InsertQueueCount == 0 && isDone)
-                {
-                    exception?.Throw();
-                    yield break;
-                }
-
                 TaskCompletionSource<T> source = new();
 
                 while (true)
@@ -216,8 +163,4 @@ public sealed class WaitQueue<T>(int? capacity = null)
             yield return await item;
         }
     }
-
-    void IDisposable.Dispose() => Dispose();
-
-    async ValueTask IAsyncDisposable.DisposeAsync() => await Task.Factory.StartNew(() => Dispose());
 }
