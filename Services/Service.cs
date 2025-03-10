@@ -51,7 +51,7 @@ public abstract partial class Service<C> : IServiceInternal
     private ServiceInstance InternalContext =>
         internalContext ?? throw new InvalidOperationException("Service is not running.");
 
-    protected CancellationToken GetCancellationToken() =>
+    protected CancellationToken GetServiceCancellationToken() =>
         InternalContext.CancellationTokenSource.Token;
 
     protected C GetContext() =>

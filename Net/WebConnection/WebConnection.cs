@@ -564,7 +564,7 @@ public class WebConnection(WebSocket webSocket, WebConnectionOptions options)
 
         using CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            GetCancellationToken()
+            GetServiceCancellationToken()
         );
 
         return await context.Requests.Dequeue(source.Token);
