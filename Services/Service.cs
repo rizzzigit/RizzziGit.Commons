@@ -24,14 +24,6 @@ interface IServiceInternal : IService
 public abstract partial class Service<C> : IServiceInternal
     where C : notnull
 {
-    private static TaskFactory? taskFactory;
-
-    private static TaskFactory GetTaskFactory() =>
-        taskFactory ??= new TaskFactory(
-            TaskCreationOptions.LongRunning,
-            TaskContinuationOptions.LongRunning
-        );
-
     public Service(string name, IService? downstream)
         : this(name, downstream is IServiceInternal internalService ? internalService.Logger : null)
     { }
@@ -102,35 +94,20 @@ public abstract partial class Service<C> : IServiceInternal
             lastException = null;
             TaskCompletionSource<ServiceInstance> initiation = new();
 
+            async Task run()
+            {
+                await RunInternal(
+                    await initiation.Task,
+                    startupCancellationToken,
+                    startupTaskCompletionSource,
+                    serviceCancellationTokenSource
+                );
+            }
+
             internalContext = new()
             {
-                Task = Service<C>
-                    .GetTaskFactory()
-                    .StartNew(
-                        () =>
-                        {
-                            try
-                            {
-                                Thread.CurrentThread.Name = $"{GetType().Name}: {Name}";
-                                RunInternal(
-                                        initiation.Task.GetAwaiter().GetResult(),
-                                        startupCancellationToken,
-                                        startupTaskCompletionSource,
-                                        serviceCancellationTokenSource
-                                    )
-                                    .GetAwaiter()
-                                    .GetResult();
-                            }
-                            finally
-                            {
-                                lock (this)
-                                {
-                                    internalContext = null;
-                                }
-                            }
-                        },
-                        CancellationToken.None
-                    ),
+                Task = run(),
+
                 CancellationTokenSource = serviceCancellationTokenSource,
                 State = ServiceState.NotRunning,
                 Context = null,
