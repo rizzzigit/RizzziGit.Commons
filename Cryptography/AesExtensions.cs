@@ -13,6 +13,47 @@ public struct AesParameters
     public required CipherMode Mode;
 }
 
+public sealed record AesEncrypted
+{
+    public static AesEncrypted Encrypt(
+        Aes aes,
+        byte[] bytes,
+        bool exportIv = true,
+        bool exportKey = false
+    ) =>
+        new()
+        {
+            Parameters = aes.ExportParameters(exportIv, exportKey),
+            EncryptedBytes = aes.Encrypt(bytes),
+        };
+
+    public static AesEncrypted Encrypt(
+        AesParameters parameters,
+        byte[] bytes,
+        byte[]? key = null,
+        byte[]? iv = null,
+        bool exportIv = true,
+        bool exportKey = false
+    )
+    {
+        using Aes aes = parameters.CreateAes(key, iv);
+
+        return Encrypt(aes, bytes, exportIv, exportKey);
+    }
+
+    public required AesParameters Parameters;
+    public required byte[] EncryptedBytes;
+
+    public byte[] Decrypt(byte[]? key, byte[]? iv = null)
+    {
+        using Aes aes = Parameters.CreateAes(key, iv);
+
+        return Decrypt(aes);
+    }
+
+    public byte[] Decrypt(Aes aes) => aes.Decrypt(EncryptedBytes);
+}
+
 public static class AesExtensions
 {
     public static byte[] Encrypt(this Aes aes, byte[] bytes)
@@ -71,4 +112,32 @@ public static class AesExtensions
             aes.IV = parameters.IV;
         }
     }
+
+    public static Aes CreateAes(
+        this AesParameters parameters,
+        byte[]? key = null,
+        byte[]? iv = null
+    )
+    {
+        Aes aes = Aes.Create();
+        aes.ImportParameters(parameters, key, iv);
+
+        return aes;
+    }
+
+    public static AesEncrypted SerializedEncrypt(
+        this Aes aes,
+        byte[] bytes,
+        bool exportIv = true,
+        bool exportKey = false
+    ) => AesEncrypted.Encrypt(aes, bytes, exportIv, exportKey);
+
+    public static AesEncrypted SerializedEncrypt(
+        this AesParameters parameters,
+        byte[] bytes,
+        byte[]? aesKey = null,
+        byte[]? aesIv = null,
+        bool exportIv = true,
+        bool exportKey = false
+    ) => AesEncrypted.Encrypt(parameters, bytes, aesKey, aesIv, exportIv, exportKey);
 }
