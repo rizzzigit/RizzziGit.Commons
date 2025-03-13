@@ -142,18 +142,17 @@ public class WebConnection(WebSocket webSocket, WebConnectionOptions options)
         CancellationToken serviceCancellationToken
     )
     {
-        WebConnectionContext context =
-            new()
-            {
-                RequestCancellationTokenSources = new(),
-                ResponseTaskCompletionSources = new(),
+        WebConnectionContext context = new()
+        {
+            RequestCancellationTokenSources = new(),
+            ResponseTaskCompletionSources = new(),
 
-                ReceiveDone = false,
-                Requests = new(),
-                Feed = new(),
+            ReceiveDone = false,
+            Requests = new(),
+            Feed = new(),
 
-                NextRequestId = 0,
-            };
+            NextRequestId = 0,
+        };
 
         return Task.FromResult(context);
     }
@@ -190,15 +189,19 @@ public class WebConnection(WebSocket webSocket, WebConnectionOptions options)
         CancellationToken serviceCancellationToken
     )
     {
-        Task[] tasks =
-        [
-            Task.Delay(-1, serviceCancellationToken),
+        WaitTaskBeforeStopping(
             RunReceiveLoop(context, serviceCancellationToken),
-            RunWorker(context, serviceCancellationToken)
-        ];
+            "Receive Loop",
+            CancellationToken.None
+        );
 
-        await Task.WhenAny(tasks);
-        WaitTasksBeforeStopping.AddRange(tasks);
+        WaitTaskBeforeStopping(
+            RunWorker(context, serviceCancellationToken),
+            "Worker",
+            serviceCancellationToken
+        );
+
+        await base.OnRun(context, serviceCancellationToken);
     }
 
     private async Task RunReceiveLoop(
@@ -335,12 +338,11 @@ public class WebConnection(WebSocket webSocket, WebConnectionOptions options)
                 TaskCompletionSource<CompositeBuffer> taskCompletionSource = new();
                 try
                 {
-                    WebConnectionRequest request =
-                        new(taskCompletionSource)
-                        {
-                            Data = bytes.Slice(5),
-                            CancellationToken = cancellationTokenSource.Token
-                        };
+                    WebConnectionRequest request = new(taskCompletionSource)
+                    {
+                        Data = bytes.Slice(5),
+                        CancellationToken = cancellationTokenSource.Token,
+                    };
 
                     await context.Requests.Enqueue(request, cancellationToken);
 

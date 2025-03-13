@@ -60,8 +60,6 @@ public abstract partial class Service<C> : IServiceInternal
             ?? throw new InvalidOperationException("Context has not yet been initialized")
         ).Value!;
 
-    protected List<Task> WaitTasksBeforeStopping => InternalContext.WaitTasksBeforeStopping;
-
     protected abstract Task<C> OnStart(
         CancellationToken startupCancellationToken,
         CancellationToken serviceCancellationToken
@@ -111,7 +109,8 @@ public abstract partial class Service<C> : IServiceInternal
                 CancellationTokenSource = serviceCancellationTokenSource,
                 State = ServiceState.NotRunning,
                 Context = null,
-                WaitTasksBeforeStopping = [],
+                PostRunWaitList = [],
+                PostRunWaitListSemaphore = new(1),
             };
 
             initiation.SetResult(internalContext);

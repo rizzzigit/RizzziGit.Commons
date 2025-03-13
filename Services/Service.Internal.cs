@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using RizzziGit.Commons.Threading;
 using RizzziGit.Commons.Utilities;
 
 namespace RizzziGit.Commons.Services;
@@ -115,7 +116,13 @@ public abstract partial class Service<C>
                 exceptions.Add(exception);
             }
 
-            await foreach (Task task in Task.WhenEach([.. WaitTasksBeforeStopping]))
+            await foreach (
+                Task task in Task.WhenEach(
+                    InternalContext.PostRunWaitListSemaphore.WithSemaphore<Task[]>(
+                        () => [.. InternalContext.PostRunWaitList]
+                    )
+                )
+            )
             {
                 try
                 {
