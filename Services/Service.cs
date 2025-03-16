@@ -39,17 +39,17 @@ public abstract partial class Service<C> : IServiceInternal
     }
 
     private ExceptionDispatchInfo? lastException;
-    private ServiceInstance? internalContext;
+    private ServiceInstance? instance;
     private readonly Logger logger;
 
     public readonly string Name;
 
     public event EventHandler<Exception>? ExceptionThrown;
     public event EventHandler<ServiceState>? StateChanged;
-    public ServiceState State => internalContext?.State ?? ServiceState.NotRunning;
+    public ServiceState State => instance?.State ?? ServiceState.NotRunning;
 
     private ServiceInstance InternalContext =>
-        internalContext ?? throw new InvalidOperationException("Service is not running.");
+        instance ?? throw new InvalidOperationException("Service is not running.");
 
     protected CancellationToken GetServiceCancellationToken() =>
         InternalContext.CancellationTokenSource.Token;
@@ -60,10 +60,7 @@ public abstract partial class Service<C> : IServiceInternal
             ?? throw new InvalidOperationException("Context has not yet been initialized")
         ).Value!;
 
-    protected abstract Task<C> OnStart(
-        CancellationToken startupCancellationToken,
-        CancellationToken serviceCancellationToken
-    );
+    protected abstract Task<C> OnStart(CancellationToken startupCancellationToken);
 
     protected virtual Task OnRun(C context, CancellationToken serviceCancellationToken) =>
         Task.Delay(-1, serviceCancellationToken);
@@ -84,36 +81,40 @@ public abstract partial class Service<C> : IServiceInternal
 
         lock (this)
         {
-            if (internalContext != null)
+            if (instance != null)
             {
                 throw new InvalidOperationException("Service is already running.");
             }
 
             lastException = null;
-            TaskCompletionSource<ServiceInstance> initiation = new();
+            TaskCompletionSource<ServiceInstance> instanceSource = new();
 
             async Task run()
             {
                 await RunInternal(
-                    await initiation.Task,
-                    startupCancellationToken,
+                    await instanceSource.Task,
                     startupTaskCompletionSource,
-                    serviceCancellationTokenSource
+                    serviceCancellationTokenSource,
+                    startupCancellationToken
                 );
             }
 
-            internalContext = new()
+            instance = new()
             {
                 Task = run(),
 
                 CancellationTokenSource = serviceCancellationTokenSource,
                 State = ServiceState.NotRunning,
                 Context = null,
+
                 PostRunWaitList = [],
                 PostRunWaitListSemaphore = new(1),
+
+                ChildSeviceList = [],
+                ChildSeviceListSemaphore = new(1),
             };
 
-            initiation.SetResult(internalContext);
+            instanceSource.SetResult(instance);
         }
 
         await startupTaskCompletionSource.Task;
@@ -125,7 +126,7 @@ public abstract partial class Service<C> : IServiceInternal
 
         lock (this)
         {
-            serviceInstanceContext = internalContext;
+            serviceInstanceContext = instance;
 
             if (serviceInstanceContext == null)
             {

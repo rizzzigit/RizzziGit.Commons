@@ -37,7 +37,7 @@ public abstract partial class Service<C>
 
         lock (this)
         {
-            task = internalContext?.Task ?? Task.CompletedTask;
+            task = instance?.Task ?? Task.CompletedTask;
         }
 
         try

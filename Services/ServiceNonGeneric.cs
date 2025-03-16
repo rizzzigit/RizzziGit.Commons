@@ -19,10 +19,8 @@ public abstract class Service : Service<object>
     protected sealed override Task OnRun(object context, CancellationToken cancellationToken) =>
         OnRun(cancellationToken);
 
-    protected sealed override Task<object> OnStart(
-        CancellationToken startupCancellationToken,
-        CancellationToken serviceCancellationToken
-    ) => Task.FromResult(new object());
+    protected sealed override Task<object> OnStart(CancellationToken startupCancellationToken) =>
+        Task.FromResult(new object());
 
     protected sealed override Task OnStop(object context, ExceptionDispatchInfo? exception) =>
         OnStop(exception);

@@ -7,13 +7,13 @@ namespace RizzziGit.Commons.Services;
 public abstract partial class Service<C>
 {
     private async Task RunInternal(
-        ServiceInstance serviceContext,
-        CancellationToken startupCancellationToken,
+        ServiceInstance instance,
         TaskCompletionSource startupTaskCompletionSource,
-        CancellationTokenSource serviceCancellationTokenSource
+        CancellationTokenSource serviceCancellationTokenSource,
+        CancellationToken startupCancellationToken
     )
     {
-        SetState(serviceContext, ServiceState.StartingUp);
+        SetState(instance, ServiceState.StartingUp);
 
         void logError(Exception exception)
         {
@@ -24,19 +24,49 @@ public abstract partial class Service<C>
 
         try
         {
-            serviceContext.Context = new(
+            instance.Context = new(
                 await StartInternal(startupCancellationToken, serviceCancellationTokenSource.Token)
             );
 
-            SetState(serviceContext, ServiceState.Running);
+            SetState(instance, ServiceState.Running);
             startupTaskCompletionSource.SetResult();
         }
         catch (Exception exception)
         {
+            serviceCancellationTokenSource.Cancel();
+
             logError(exception);
 
-            SetState(serviceContext, ServiceState.CrashingDown);
-            SetState(serviceContext, ServiceState.Crashed);
+            SetState(instance, ServiceState.CrashingDown);
+
+            {
+                List<Exception> stopExceptions = [];
+
+                while (true)
+                {
+                    IService[] services =
+                        instance.ChildSeviceListSemaphore.WithSemaphore<IService[]>(
+                            () => [.. instance.ChildSeviceList]
+                        );
+
+                    if (services.Length == 0)
+                    {
+                        break;
+                    }
+
+                    await StopChildServices(services, stopExceptions);
+                }
+
+                if (stopExceptions.Count != 0)
+                {
+                    AggregateException aggregateException = new([exception, .. stopExceptions]);
+
+                    startupTaskCompletionSource.SetException(aggregateException);
+                    throw aggregateException;
+                }
+            }
+
+            SetState(instance, ServiceState.Crashed);
 
             startupTaskCompletionSource.SetException(exception);
             throw;
@@ -44,37 +74,38 @@ public abstract partial class Service<C>
 
         try
         {
-            await RunInternal(serviceContext.Context!.Value!, serviceCancellationTokenSource);
+            await RunInternal(instance, instance.Context!.Value!, serviceCancellationTokenSource);
 
-            SetState(serviceContext, ServiceState.ShuttingDown);
+            SetState(instance, ServiceState.ShuttingDown);
         }
         catch (Exception exception)
         {
             logError(exception);
 
-            SetState(serviceContext, ServiceState.CrashingDown);
+            SetState(instance, ServiceState.CrashingDown);
 
             await StopInternal(
-                serviceContext.Context!.Value!,
+                instance,
+                instance.Context!.Value!,
                 ExceptionDispatchInfo.Capture(exception)
             );
 
-            SetState(serviceContext, ServiceState.Crashed);
+            SetState(instance, ServiceState.Crashed);
             throw;
         }
 
         try
         {
-            await StopInternal(serviceContext.Context!.Value!, null);
+            await StopInternal(instance, instance.Context!.Value!, null);
 
-            SetState(serviceContext, ServiceState.NotRunning);
+            SetState(instance, ServiceState.NotRunning);
         }
         catch (Exception exception)
         {
             logError(exception);
 
-            SetState(serviceContext, ServiceState.CrashingDown);
-            SetState(serviceContext, ServiceState.Crashed);
+            SetState(instance, ServiceState.CrashingDown);
+            SetState(instance, ServiceState.Crashed);
             throw;
         }
     }
@@ -90,10 +121,11 @@ public abstract partial class Service<C>
                 serviceCancellationToken
             );
 
-        return await OnStart(startupLinkedCancellationTokenSource.Token, serviceCancellationToken);
+        return await OnStart(startupLinkedCancellationTokenSource.Token);
     }
 
     private async Task RunInternal(
+        ServiceInstance instance,
         C context,
         CancellationTokenSource serviceCancellationTokenSource
     )
@@ -116,39 +148,43 @@ public abstract partial class Service<C>
                 exceptions.Add(exception);
             }
 
-            await foreach (
-                Task task in Task.WhenEach(
-                    InternalContext.PostRunWaitListSemaphore.WithSemaphore<Task[]>(
-                        () => [.. InternalContext.PostRunWaitList]
-                    )
-                )
-            )
+            while (true)
             {
-                try
+                PostRunEntry[] tasks = instance.PostRunWaitListSemaphore.WithSemaphore(() =>
                 {
-                    await task;
+                    PostRunEntry[] tasks = [.. instance.PostRunWaitList.Reverse<PostRunEntry>()];
+
+                    return tasks;
+                });
+
+                if (tasks.Length == 0)
+                {
+                    break;
                 }
-                catch (Exception exception)
+
+                foreach ((string? description, Task task) in tasks)
                 {
-                    if (
-                        exception is OperationCanceledException operationCanceledException
-                        && (operationCanceledException.CancellationToken == cancellationToken)
-                    )
+                    try
                     {
-                        continue;
+                        Debug(
+                            $"Waiting for {description ?? "a task"} to complete...",
+                            LOGGING_SCOPE_POST_RUN_AWAITER
+                        );
+                        await task;
                     }
+                    catch (Exception exception)
+                    {
+                        if (
+                            exception is OperationCanceledException operationCanceledException
+                            && (operationCanceledException.CancellationToken == cancellationToken)
+                        )
+                        {
+                            continue;
+                        }
 
-                    exceptions.Add(exception);
+                        exceptions.Add(exception);
+                    }
                 }
-            }
-
-            if (exceptions.Count == 1)
-            {
-                ExceptionDispatchInfo.Throw(exceptions[0]);
-            }
-            else if (exceptions.Count > 1)
-            {
-                throw new AggregateException(exceptions);
             }
         }
         catch (Exception exception)
@@ -165,20 +201,76 @@ public abstract partial class Service<C>
         }
     }
 
-    private async Task StopInternal(C context, ExceptionDispatchInfo? exception)
+    private async Task StopInternal(
+        ServiceInstance instance,
+        C context,
+        ExceptionDispatchInfo? exception
+    )
     {
+        List<Exception> exceptions = [];
+
+        if (exception is not null)
+        {
+            exceptions.Add(exception.SourceException);
+        }
+
+        while (true)
+        {
+            IService[] services = instance.ChildSeviceListSemaphore.WithSemaphore<IService[]>(
+                () => [.. instance.ChildSeviceList]
+            );
+
+            if (services.Length == 0)
+            {
+                break;
+            }
+
+            await StopChildServices(services, exceptions);
+        }
+
         try
         {
-            await OnStop(context, exception);
+            await OnStop(
+                context,
+                exceptions.Count == 0
+                    ? null
+                    : ExceptionDispatchInfo.Capture(
+                        exceptions.Count == 1 ? exceptions[0] : new AggregateException(exceptions)
+                    )
+            );
         }
         catch (Exception e)
         {
-            if (exception != null)
-            {
-                throw new AggregateException(exception.SourceException, e);
-            }
+            exceptions.Add(e);
+        }
 
-            throw;
+        if (exceptions.Count == 0)
+        {
+            return;
+        }
+
+        if (exceptions.Count == 1)
+        {
+            ExceptionDispatchInfo.Throw(exceptions.First());
+        }
+
+        throw new AggregateException(exceptions);
+    }
+
+    private async Task StopChildServices(IService[] services, List<Exception> exceptions)
+    {
+        foreach (IService service in services.AsEnumerable().Reverse())
+        {
+            try
+            {
+                Debug($"Waiting for {service.Name} service to stop...", "Child Services");
+
+                await service.Stop();
+            }
+            catch (Exception serviceException)
+            {
+                exceptions.Add(serviceException);
+            }
         }
     }
 }

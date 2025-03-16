@@ -5,9 +5,13 @@ namespace RizzziGit.Commons.Services;
 
 public abstract partial class Service<C>
 {
+    static string LOGGING_SCOPE_POST_RUN_AWAITER = "Post-Run Awaiter";
+
+    private sealed record PostRunEntry(string? Description, Task Task);
+
     private sealed partial class ServiceInstance
     {
-        public required List<Task> PostRunWaitList;
+        public required List<PostRunEntry> PostRunWaitList;
         public required SemaphoreSlim PostRunWaitListSemaphore;
     }
 
@@ -29,18 +33,16 @@ public abstract partial class Service<C>
         CancellationToken cancellationToken = default
     )
     {
-        string scope = "Post-Run Awaiter";
         try
         {
             try
             {
                 InternalContext.PostRunWaitListSemaphore.WithSemaphore(
-                    () => InternalContext.PostRunWaitList.Add(task)
+                    () => InternalContext.PostRunWaitList.Add(new(description, task))
                 );
 
-                Debug($"Added to post-run waiting list: {description ?? "Unknown task"}", scope);
+                Debug($"Added: {description ?? "Unknown task"}", LOGGING_SCOPE_POST_RUN_AWAITER);
                 await task.WaitAsync(cancellationToken);
-                Debug($"Task Completed: {description ?? "Unknown task"}", scope);
             }
             catch (Exception exception)
             {
@@ -49,17 +51,20 @@ public abstract partial class Service<C>
                     && operationCanceledException.CancellationToken == cancellationToken
                 )
                 {
-                    Debug($"Waiting cancelled for task: {description ?? "Unknown task"}", scope);
+                    Debug(
+                        $"Cancelled: {description ?? "Unknown task"}",
+                        LOGGING_SCOPE_POST_RUN_AWAITER
+                    );
                     return;
                 }
 
-                Error(exception, scope);
+                Error(exception, LOGGING_SCOPE_POST_RUN_AWAITER);
             }
         }
         finally
         {
             InternalContext.PostRunWaitListSemaphore.WithSemaphore(
-                () => InternalContext.PostRunWaitList.Remove(task)
+                () => InternalContext.PostRunWaitList.Remove(new(description, task))
             );
         }
     }

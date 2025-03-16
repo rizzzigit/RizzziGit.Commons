@@ -138,8 +138,7 @@ public class WebConnection(WebSocket webSocket, WebConnectionOptions options)
     }
 
     protected override Task<WebConnectionContext> OnStart(
-        CancellationToken startupCancellationToken,
-        CancellationToken serviceCancellationToken
+        CancellationToken startupCancellationToken
     )
     {
         WebConnectionContext context = new()
