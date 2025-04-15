@@ -115,14 +115,9 @@ public class WeakList<T> : IList<T>
     {
         lock (this)
         {
-            if (
-                (arrayIndex > array.Length)
-                || (arrayIndex < 0)
-                || (array.Length - arrayIndex) < Count
-            )
-            {
-                throw new ArgumentOutOfRangeException(nameof(arrayIndex));
-            }
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(arrayIndex, array.Length);
+            ArgumentOutOfRangeException.ThrowIfLessThan(arrayIndex, 0);
+            ArgumentOutOfRangeException.ThrowIfLessThan(array.Length - arrayIndex, Count);
 
             for (int index = arrayIndex; index < array.Length; index++)
             {

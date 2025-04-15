@@ -94,7 +94,7 @@ public sealed class Logger(string name)
     {
         if (!Enum.IsDefined(level))
         {
-            throw new ArgumentOutOfRangeException(nameof(level));
+            throw new ArgumentException($"{level} is not a defined {nameof(LogLevel)}");
         }
 
         InternalLog(level, scope ?? [], message, DateTimeOffset.UtcNow, state);

@@ -6,13 +6,13 @@ public enum StringEncoding
 {
     UTF8,
     Hex,
-    Base64
+    Base64,
 }
 
 public enum PaddingType
 {
     Left,
-    Right
+    Right,
 }
 
 public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<CompositeBuffer>
@@ -30,7 +30,7 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
     {
         Blocks =
         [
-            [.. source]
+            [.. source],
         ];
     }
 
@@ -139,7 +139,6 @@ public sealed partial class CompositeBuffer : IEnumerable<byte>, IEquatable<Comp
             int size = (int)long.Min(Length, int.MaxValue);
             int start = range.Start.GetOffset(size);
             int end = range.End.GetOffset(size);
-
 
             return Slice(start, end);
         }

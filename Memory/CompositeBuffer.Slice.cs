@@ -15,21 +15,8 @@ public sealed partial class CompositeBuffer
             return [];
         }
 
-        if (start > Length)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(start),
-                "Start is greater than the length of the buffer."
-            );
-        }
-
-        if (end > Length)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(end),
-                "End is greater than the length of the buffer."
-            );
-        }
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(start, Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(end, Length);
 
         List<byte[]> newBlocks = [];
         long remainingOffset = start;

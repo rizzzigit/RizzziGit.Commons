@@ -22,14 +22,8 @@ public sealed partial class CompositeBuffer
 
     public CompositeBuffer Splice(long start, long end)
     {
-        if (start > Length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(start));
-        }
-        else if ((end - start) > Length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(end));
-        }
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(start, Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(end - start, Length);
 
         List<byte[]> splicedBuffers = [];
         long remainingOffset = start;

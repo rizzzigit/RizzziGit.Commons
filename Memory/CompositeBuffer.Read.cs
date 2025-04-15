@@ -38,14 +38,8 @@ public sealed partial class CompositeBuffer
 
     public long Read(long position, byte[] output, int offset, int count)
     {
-        if (position > Length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(position));
-        }
-        else if ((position + count) > Length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(count));
-        }
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(position, Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(position + count, Length);
 
         ResolveIndex(position, out int x, out int y);
 

@@ -14,14 +14,8 @@ public sealed partial class CompositeBuffer
         }
         else
         {
-            if (position > Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(position));
-            }
-            else if ((position + inputLength) > Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(inputLength));
-            }
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(position, Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(position + inputLength, Length);
 
             ResolveIndex(position, out int x, out int y);
 
@@ -45,20 +39,14 @@ public sealed partial class CompositeBuffer
         }
         else
         {
-            if (position > Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(position));
-            }
-            else if ((position + input.Length) > Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(input));
-            }
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(position, Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(position + input.Length, Length);
 
             Blocks =
             [
                 .. SliceBlocks(0, position),
                 .. input.Blocks,
-                .. SliceBlocks(position + input.Length)
+                .. SliceBlocks(position + input.Length),
             ];
         }
     }
