@@ -19,7 +19,13 @@ public sealed partial class CompositeBuffer
             get => InternalPosition;
             set
             {
-                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, Length);
+                if (value > Length)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        $"Value must be less than or equal to {Length}"
+                    );
+                }
 
                 InternalPosition = value;
             }
@@ -49,7 +55,14 @@ public sealed partial class CompositeBuffer
                 case SeekOrigin.End:
                     return Seek(Length - offset, SeekOrigin.Begin);
                 case SeekOrigin.Begin:
-                    ArgumentOutOfRangeException.ThrowIfGreaterThan(offset, Length);
+                    if (offset > Length)
+                    {
+                        throw new ArgumentOutOfRangeException(
+                            nameof(offset),
+                            $"Value must be less than {Length}"
+                        );
+                    }
+
                     return Position = offset;
 
                 default:
