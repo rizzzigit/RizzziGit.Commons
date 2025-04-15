@@ -67,39 +67,41 @@ public static class SemaphoreExtensions
                 semaphoreSlim.Release();
             }
         }
+    }
 
-        public async Task WithSemaphore(
-            Func<Task> function,
-            CancellationToken cancellationToken = default
-        )
+    public static async Task WithSemaphore(
+        this SemaphoreSlim semaphoreSlim,
+        Func<Task> function,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await semaphoreSlim.WaitAsync(cancellationToken);
+
+        try
         {
-            await semaphoreSlim.WaitAsync(cancellationToken);
-
-            try
-            {
-                await function();
-            }
-            finally
-            {
-                semaphoreSlim.Release();
-            }
+            await function();
         }
-
-        public async Task<T> WithSemaphore<T>(
-            Func<Task<T>> function,
-            CancellationToken cancellationToken = default
-        )
+        finally
         {
-            await semaphoreSlim.WaitAsync(cancellationToken);
+            semaphoreSlim.Release();
+        }
+    }
 
-            try
-            {
-                return await function();
-            }
-            finally
-            {
-                semaphoreSlim.Release();
-            }
+    public static async Task<T> WithSemaphore<T>(
+        this SemaphoreSlim semaphoreSlim,
+        Func<Task<T>> function,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await semaphoreSlim.WaitAsync(cancellationToken);
+
+        try
+        {
+            return await function();
+        }
+        finally
+        {
+            semaphoreSlim.Release();
         }
     }
 }

@@ -5,16 +5,14 @@ namespace RizzziGit.Commons.Utilities;
 
 public static class TcpListenerExtensions
 {
-    extension (TcpListener listener)
+    public static async IAsyncEnumerable<TcpClient> ToAsyncEnumerable(
+        this TcpListener listener,
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
-        public async IAsyncEnumerable<TcpClient> ToAsyncEnumerable(
-            [EnumeratorCancellation] CancellationToken cancellationToken
-        )
+        while (true)
         {
-            while (true)
-            {
-                yield return await listener.AcceptTcpClientAsync(cancellationToken);
-            }
+            yield return await listener.AcceptTcpClientAsync(cancellationToken);
         }
     }
 }
