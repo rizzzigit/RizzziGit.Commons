@@ -2,89 +2,104 @@ namespace RizzziGit.Commons.Threading;
 
 public static class SemaphoreExtensions
 {
-    public static void WithSemaphore(this Semaphore semaphore, Action action)
+    extension (Semaphore semaphore)
     {
-        semaphore.WaitOne();
-        try
+        public void WithSemaphore(Action action)
         {
-            action();
+            semaphore.WaitOne();
+            try
+            {
+                action();
+            }
+            finally
+            {
+                semaphore.Release();
+            }
         }
-        finally
+
+        public T WithSemaphore<T>(Func<T> function)
         {
-            semaphore.Release();
+            semaphore.WaitOne();
+
+            try
+            {
+                return function();
+            }
+            finally
+            {
+                semaphore.Release();
+            }
         }
     }
 
-    public static T WithSemaphore<T>(this Semaphore semaphore, Func<T> function)
+    extension (SemaphoreSlim semaphoreSlim)
     {
-        semaphore.WaitOne();
+        public void WithSemaphore(
+            Action action,
+            CancellationToken cancellationToken = default
+        )
+        {
+            semaphoreSlim.Wait(cancellationToken);
 
-        try
-        {
-            return function();
+            try
+            {
+                action();
+            }
+            finally
+            {
+                semaphoreSlim.Release();
+            }
         }
-        finally
-        {
-            semaphore.Release();
-        }
-    }
 
-    public static void WithSemaphore(this SemaphoreSlim semaphoreSlim, Action action)
-    {
-        semaphoreSlim.Wait(CancellationToken.None);
+        public T WithSemaphore<T>(
+            Func<T> function,
+            CancellationToken cancellationToken = default
+        )
+        {
+            semaphoreSlim.Wait(cancellationToken);
 
-        try
-        {
-            action();
+            try
+            {
+                return function();
+            }
+            finally
+            {
+                semaphoreSlim.Release();
+            }
         }
-        finally
-        {
-            semaphoreSlim.Release();
-        }
-    }
 
-    public static T WithSemaphore<T>(this SemaphoreSlim semaphoreSlim, Func<T> function)
-    {
-        semaphoreSlim.Wait(CancellationToken.None);
+        public async Task WithSemaphore(
+            Func<Task> function,
+            CancellationToken cancellationToken = default
+        )
+        {
+            await semaphoreSlim.WaitAsync(cancellationToken);
 
-        try
-        {
-            return function();
+            try
+            {
+                await function();
+            }
+            finally
+            {
+                semaphoreSlim.Release();
+            }
         }
-        finally
-        {
-            semaphoreSlim.Release();
-        }
-    }
 
-    public static async Task WithSemaphore(this SemaphoreSlim semaphoreSlim, Func<Task> function)
-    {
-        await semaphoreSlim.WaitAsync(CancellationToken.None);
+        public async Task<T> WithSemaphore<T>(
+            Func<Task<T>> function,
+            CancellationToken cancellationToken = default
+        )
+        {
+            await semaphoreSlim.WaitAsync(cancellationToken);
 
-        try
-        {
-            await function();
-        }
-        finally
-        {
-            semaphoreSlim.Release();
-        }
-    }
-
-    public static async Task<T> WithSemaphore<T>(
-        this SemaphoreSlim semaphoreSlim,
-        Func<Task<T>> function
-    )
-    {
-        await semaphoreSlim.WaitAsync(CancellationToken.None);
-
-        try
-        {
-            return await function();
-        }
-        finally
-        {
-            semaphoreSlim.Release();
+            try
+            {
+                return await function();
+            }
+            finally
+            {
+                semaphoreSlim.Release();
+            }
         }
     }
 }
