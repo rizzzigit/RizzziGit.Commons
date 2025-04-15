@@ -40,7 +40,7 @@ public class WeakKeyDictionary<K, V> : IGenericDictionary<K, V>
                     if (!deleted)
                     {
                         InternalKeys.RemoveAt(index);
-                        InternalKeys.RemoveAt(index);
+                        InternalValues.RemoveAt(index);
 
                         index--;
                         deleted = true;
