@@ -11,6 +11,8 @@ public abstract class BaseArgumentAttribute : Attribute
     public required string Title;
     public required string[] Description;
     public required string Hint;
+
+    public string? ParserMethodName;
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
@@ -29,3 +31,5 @@ public sealed class OrdinalArgumentAttribute() : BaseArgumentAttribute;
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 public sealed class RestArgumentAttribute() : BaseArgumentAttribute;
+
+public sealed class ArgumentParserAttribute() : BaseArgumentAttribute;

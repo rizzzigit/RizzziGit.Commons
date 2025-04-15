@@ -22,9 +22,9 @@ public partial record ArgumentToken
         TypedParserOptions options
     )
     {
-        if (typedOrdinalValue == null)
+        if (typedOrdinalValue is null)
         {
-            if (parsedOrdinalValue != null)
+            if (parsedOrdinalValue is not null)
             {
                 if (options.IgnoreUnexpectedOrdinalValues)
                 {
@@ -36,9 +36,15 @@ public partial record ArgumentToken
         }
         else
         {
-            if (parsedOrdinalValue == null)
+            if (parsedOrdinalValue is null)
             {
-                if (typedOrdinalValue.IsRequired || !typedOrdinalValue.IsNullable)
+                if (
+                    typedOrdinalValue.IsRequired
+                    || (
+                        !typedOrdinalValue.Member.GetPropertyOrFieldType().IsPrimitive
+                        && !typedOrdinalValue.IsNullable
+                    )
+                )
                 {
                     throw new InvalidOperationException(
                         $"Required or non-nullable ordinal value is missing: {typedOrdinalValue}"
@@ -51,7 +57,12 @@ public partial record ArgumentToken
             }
             else
             {
-                typedOrdinalValue.Value = parsedOrdinalValue;
+                typedOrdinalValue.Value = CastToType(
+                    typedOrdinalValue.Attribute,
+                    instance,
+                    parsedOrdinalValue,
+                    typedOrdinalValue.GetPropertyOrFieldType()
+                );
             }
         }
     }
@@ -99,16 +110,32 @@ public partial record ArgumentToken
                     toSet = result
                         .Select(
                             (parsedTag) =>
-                                CastToType(parsedTag.Value!, memberType.GetElementType()!)
+                                CastToType(
+                                    typedTag.Attribute,
+                                    instance,
+                                    parsedTag.Value!,
+                                    memberType.GetElementType()!
+                                )
                         )
                         .ToArray();
                 }
                 else
                 {
-                    toSet = CastToType(result.First().Value!, memberType);
+                    toSet = CastToType(
+                        typedTag.Attribute,
+                        instance,
+                        result.First().Value!,
+                        memberType
+                    );
                 }
 
-                if (toSet is null && !typedTag.IsNullable)
+                if (
+                    toSet is null
+                    && (
+                        !typedTag.Member.GetPropertyOrFieldType().IsPrimitive
+                        && !typedTag.IsNullable
+                    )
+                )
                 {
                     throw new InvalidOperationException(
                         $"Parameter {typedTag.Attribute} requires a value."
@@ -119,7 +146,13 @@ public partial record ArgumentToken
             }
             else
             {
-                if (typedTag.IsRequired || !typedTag.IsNullable)
+                if (
+                    typedTag.IsRequired
+                    || (
+                        !typedTag.Member.GetPropertyOrFieldType().IsPrimitive
+                        && !typedTag.IsNullable
+                    )
+                )
                 {
                     throw new InvalidOperationException(
                         $"Required or non-nullable parameter is missing: {typedTag}"
@@ -162,9 +195,9 @@ public partial record ArgumentToken
         TypedParserOptions options
     )
     {
-        if (member == null)
+        if (member is null)
         {
-            if (values != null)
+            if (values is not null)
             {
                 if (options.IgnoreUnexpectedRest)
                 {
@@ -174,7 +207,7 @@ public partial record ArgumentToken
         }
         else
         {
-            if (values == null)
+            if (values is null)
             {
                 if (!member.IsNullable)
                 {

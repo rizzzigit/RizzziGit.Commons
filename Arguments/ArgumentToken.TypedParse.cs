@@ -38,7 +38,7 @@ internal sealed record TypedOrdinalArgumentsSet(
     {
         IEnumerable<string> names = Tags.Select((tag) => $"{tag.Attribute}");
 
-        if (OrdinalValue != null)
+        if (OrdinalValue is not null)
         {
             names = names.Append($"{OrdinalValue.Member}");
         }
@@ -112,7 +112,12 @@ internal sealed record TypedArgumentBinding<T>(
 )
     where T : BaseArgumentAttribute
 {
-    public bool IsRequired => Member.IsRequired;
+    public bool IsRequired =>
+        Member.Member is PropertyInfo property
+            ? property.TryGetCustomAttribute<RequiredAttribute>(out _)
+        : Member.Member is FieldInfo a ? a.TryGetCustomAttribute<RequiredAttribute>(out _)
+        : (Attribute is ArgumentAttribute argumentAttribute && argumentAttribute.IsRequired);
+
     public bool IsNullable => Member.IsNullable;
 
     public object? Value
@@ -129,10 +134,10 @@ internal sealed record TypedArgumentBinding<T>(
             ArgumentAttribute argument => $"{argument}",
 
             OrdinalArgumentAttribute ordinalArgument =>
-                $"{(IsRequired || (IsRequired && !IsNullable) ? $"<{ordinalArgument.Hint}>" : $"[{ordinalArgument.Hint}]")}",
+                $"{(IsRequired || (IsRequired && !Member.GetPropertyOrFieldType().IsPrimitive && !IsNullable) ? $"<{ordinalArgument.Hint}>" : $"[{ordinalArgument.Hint}]")}",
 
             RestArgumentAttribute restArgument =>
-                $"{(IsRequired || (IsRequired && !IsNullable) ? $"<-- {restArgument.Hint}>" : $"[-- {restArgument.Hint}]")}",
+                $"{(IsRequired || (IsRequired && !Member.GetPropertyOrFieldType().IsPrimitive && !IsNullable) ? $"<-- {restArgument.Hint}>" : $"[-- {restArgument.Hint}]")}",
 
             _ => throw new InvalidOperationException($"Invalid type: {Member}"),
         };
@@ -145,37 +150,51 @@ public partial record ArgumentToken
 
     public static object Parse(Type type, string[] args, TypedParserOptions? options = null)
     {
-        if (type.IsAbstract)
+        Exception? exception = null;
+
+        try
         {
-            throw new InvalidOperationException("Abstract input type is not supported.");
-        }
+            if (type.IsAbstract)
+            {
+                throw new InvalidOperationException("Abstract input type is not supported.");
+            }
 
-        ConstructorInfo? constructor;
+            ConstructorInfo? constructor;
 
-        if (
-            options != null
-            && (
-                constructor = type.GetConstructor(
-                    [typeof(IEnumerable<ArgumentToken>), typeof(TypedParserOptions)]
+            if (
+                options is not null
+                && (
+                    constructor = type.GetConstructor(
+                        [typeof(IEnumerable<ArgumentToken>), typeof(TypedParserOptions)]
+                    )
                 )
-            ) != null
-        )
-        {
-            return constructor.Invoke([Parse(args), options]);
+                    is not null
+            )
+            {
+                return constructor.Invoke([Parse(args), options]);
+            }
+            else if (
+                options is null
+                && (constructor = type.GetConstructor([typeof(IEnumerable<ArgumentToken>)]))
+                    is not null
+            )
+            {
+                return constructor.Invoke([Parse(args)]);
+            }
+            else if ((constructor = type.GetConstructor([])) is not null)
+            {
+                return Parse(type, constructor, Parse(args), options);
+            }
         }
-        else if (
-            options == null
-            && (constructor = type.GetConstructor([typeof(IEnumerable<ArgumentToken>)])) != null
-        )
+        catch (Exception e)
         {
-            return constructor.Invoke([Parse(args)]);
-        }
-        else if ((constructor = type.GetConstructor([])) != null)
-        {
-            return Parse(type, constructor, Parse(args), options);
+            exception = e;
         }
 
-        throw new InvalidOperationException($"No suitable constructor for type {type.Name}.");
+        throw new InvalidOperationException(
+            $"No suitable constructor for type {type.Name}.",
+            exception
+        );
     }
 
     private static object Parse(
