@@ -3,16 +3,18 @@ using System.Runtime.CompilerServices;
 
 namespace RizzziGit.Commons.Utilities;
 
-public static class TcpListenerExceptions
+public static class TcpListenerExtensions
 {
-    public static async IAsyncEnumerable<TcpClient> ToAsyncEnumerable(
-        this TcpListener listener,
-        [EnumeratorCancellation] CancellationToken cancellationToken
-    )
+    extension (TcpListener listener)
     {
-        while (true)
+        public async IAsyncEnumerable<TcpClient> ToAsyncEnumerable(
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
-            yield return await listener.AcceptTcpClientAsync(cancellationToken);
+            while (true)
+            {
+                yield return await listener.AcceptTcpClientAsync(cancellationToken);
+            }
         }
     }
 }
