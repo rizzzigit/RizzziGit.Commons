@@ -3,13 +3,15 @@ namespace RizzziGit.Commons.Services;
 using System.Runtime.ExceptionServices;
 using Logging;
 
-public abstract class Service : Service<object>
+public abstract class Service : Service<object>, IService
 {
     protected Service(string name, IService downstream)
         : base(name, downstream) { }
 
     protected Service(string name, Logger? downstream = null)
         : base(name, downstream) { }
+
+    protected new object GetContext() => throw new NotSupportedException();
 
     protected virtual Task OnRun(CancellationToken cancellationToken) =>
         Task.Delay(-1, cancellationToken);

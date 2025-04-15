@@ -60,27 +60,28 @@ public abstract partial class Service<C> : IServiceInternal
             ?? throw new InvalidOperationException("Context has not yet been initialized")
         ).Value!;
 
-    protected abstract Task<C> OnStart(CancellationToken startupCancellationToken);
+    protected abstract Task<C> OnStart(CancellationToken cancellationToken);
 
-    protected virtual Task OnRun(C context, CancellationToken serviceCancellationToken) =>
-        Task.Delay(-1, serviceCancellationToken);
+    protected virtual Task OnRun(C context, CancellationToken cancellationToken) =>
+        Task.Delay(-1, cancellationToken);
 
     protected virtual Task OnStop(C context, ExceptionDispatchInfo? exception) =>
         Task.CompletedTask;
 
     private void SetState(ServiceInstance instance, ServiceState state)
     {
-        Debug($"{instance.State} -> {instance.State = state}", "State");
+        Debug($"State: {instance.State} -> {instance.State = state}");
         StateChanged?.Invoke(this, state);
     }
 
-    public async Task Start(CancellationToken startupCancellationToken = default)
+    public async Task Start(CancellationToken cancellationToken = default)
     {
-        CancellationTokenSource serviceCancellationTokenSource = new();
         TaskCompletionSource startupTaskCompletionSource = new();
 
         lock (this)
         {
+            CancellationTokenSource serviceCancellationTokenSource = new();
+
             if (instance != null)
             {
                 throw new InvalidOperationException("Service is already running.");
@@ -95,7 +96,7 @@ public abstract partial class Service<C> : IServiceInternal
                     await instanceSource.Task,
                     startupTaskCompletionSource,
                     serviceCancellationTokenSource,
-                    startupCancellationToken
+                    cancellationToken
                 );
             }
 
@@ -109,9 +110,6 @@ public abstract partial class Service<C> : IServiceInternal
 
                 PostRunWaitList = [],
                 PostRunWaitListSemaphore = new(1),
-
-                ChildSeviceList = [],
-                ChildSeviceListSemaphore = new(1),
             };
 
             instanceSource.SetResult(instance);

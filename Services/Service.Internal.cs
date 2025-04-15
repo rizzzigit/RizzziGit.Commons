@@ -19,7 +19,7 @@ public abstract partial class Service<C>
         {
             lastException = ExceptionDispatchInfo.Capture(exception);
             ExceptionThrown?.Invoke(this, exception);
-            Fatal(exception.ToPrintable(), "Fatal Error");
+            Fatal(exception.ToPrintable(), ["Fatal Error"]);
         }
 
         try
@@ -38,34 +38,6 @@ public abstract partial class Service<C>
             logError(exception);
 
             SetState(instance, ServiceState.CrashingDown);
-
-            {
-                List<Exception> stopExceptions = [];
-
-                while (true)
-                {
-                    IService[] services =
-                        instance.ChildSeviceListSemaphore.WithSemaphore<IService[]>(
-                            () => [.. instance.ChildSeviceList]
-                        );
-
-                    if (services.Length == 0)
-                    {
-                        break;
-                    }
-
-                    await StopChildServices(services, stopExceptions);
-                }
-
-                if (stopExceptions.Count != 0)
-                {
-                    AggregateException aggregateException = new([exception, .. stopExceptions]);
-
-                    startupTaskCompletionSource.SetException(aggregateException);
-                    throw aggregateException;
-                }
-            }
-
             SetState(instance, ServiceState.Crashed);
 
             startupTaskCompletionSource.SetException(exception);
@@ -153,6 +125,7 @@ public abstract partial class Service<C>
                 PostRunEntry[] tasks = instance.PostRunWaitListSemaphore.WithSemaphore(() =>
                 {
                     PostRunEntry[] tasks = [.. instance.PostRunWaitList.Reverse<PostRunEntry>()];
+                    instance.PostRunWaitList.Clear();
 
                     return tasks;
                 });
@@ -168,7 +141,7 @@ public abstract partial class Service<C>
                     {
                         Debug(
                             $"Waiting for {description ?? "a task"} to complete...",
-                            LOGGING_SCOPE_POST_RUN_AWAITER
+                            [LOGGING_SCOPE_POST_RUN_AWAITER]
                         );
                         await task;
                     }
@@ -214,20 +187,6 @@ public abstract partial class Service<C>
             exceptions.Add(exception.SourceException);
         }
 
-        while (true)
-        {
-            IService[] services = instance.ChildSeviceListSemaphore.WithSemaphore<IService[]>(
-                () => [.. instance.ChildSeviceList]
-            );
-
-            if (services.Length == 0)
-            {
-                break;
-            }
-
-            await StopChildServices(services, exceptions);
-        }
-
         try
         {
             await OnStop(
@@ -255,22 +214,5 @@ public abstract partial class Service<C>
         }
 
         throw new AggregateException(exceptions);
-    }
-
-    private async Task StopChildServices(IService[] services, List<Exception> exceptions)
-    {
-        foreach (IService service in services.AsEnumerable().Reverse())
-        {
-            try
-            {
-                Debug($"Waiting for {service.Name} service to stop...", "Child Services");
-
-                await service.Stop();
-            }
-            catch (Exception serviceException)
-            {
-                exceptions.Add(serviceException);
-            }
-        }
     }
 }
