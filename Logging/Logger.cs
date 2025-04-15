@@ -67,7 +67,8 @@ public sealed class Logger(string name)
         LogLevel level,
         string[] scope,
         string message,
-        DateTimeOffset timestamp
+        DateTimeOffset timestamp,
+        object? state = null
     )
     {
         scope = [Name, .. scope];
@@ -85,27 +86,32 @@ public sealed class Logger(string name)
 
         foreach (Logger subscriber in SubscriberLoggers)
         {
-            subscriber.InternalLog(level, scope, message, timestamp);
+            subscriber.InternalLog(level, scope, message, timestamp, state);
         }
     }
 
-    public void Log(LogLevel level, string message)
+    public void Log(LogLevel level, string message, string[]? scope = null, object? state = null)
     {
         if (!Enum.IsDefined(level))
         {
             throw new ArgumentOutOfRangeException(nameof(level));
         }
 
-        InternalLog(level, [], message, DateTimeOffset.UtcNow);
+        InternalLog(level, scope ?? [], message, DateTimeOffset.UtcNow, state);
     }
 
-    public void Debug(string message) => Log(LogLevel.Debug, message);
+    public void Debug(string message, string[]? scope = null, object? state = null) =>
+        Log(LogLevel.Debug, message, scope, state);
 
-    public void Info(string message) => Log(LogLevel.Info, message);
+    public void Info(string message, string[]? scope = null, object? state = null) =>
+        Log(LogLevel.Info, message, scope, state);
 
-    public void Warn(string message) => Log(LogLevel.Warn, message);
+    public void Warn(string message, string[]? scope = null, object? state = null) =>
+        Log(LogLevel.Warn, message, scope, state);
 
-    public void Error(string message) => Log(LogLevel.Error, message);
+    public void Error(string message, string[]? scope = null, object? state = null) =>
+        Log(LogLevel.Error, message, scope, state);
 
-    public void Fatal(string message) => Log(LogLevel.Fatal, message);
+    public void Fatal(string message, string[]? scope = null, object? state = null) =>
+        Log(LogLevel.Fatal, message, scope, state);
 }
