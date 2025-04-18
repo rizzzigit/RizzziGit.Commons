@@ -15,7 +15,7 @@ public abstract partial record ArgumentToken
         public sealed record None : ParserState;
     }
 
-    public static IEnumerable<ArgumentToken> Parse(string[] args)
+    public static IEnumerable<ArgumentToken> Parse(string[] arguments)
     {
         ParserState state = new ParserState.None();
 
@@ -24,14 +24,14 @@ public abstract partial record ArgumentToken
             if (state is ParserState.PendingKeyValuePair(string key))
             {
                 state = new ParserState.None();
-                result = new KeyValuePair(key, value);
+                result = new Pair(key, value);
                 return true;
             }
 
             if (state is ParserState.PendingShorthandKeyValuePair(char shorthandKey))
             {
                 state = new ParserState.None();
-                result = new ShorthandKeyValuePair(shorthandKey, value);
+                result = new ShortPair(shorthandKey, value);
                 return true;
             }
 
@@ -39,48 +39,55 @@ public abstract partial record ArgumentToken
             return false;
         }
 
-        for (int argIndex = 0; argIndex < args.Length; argIndex++)
+        for (int argumentIndex = 0; argumentIndex < arguments.Length; argumentIndex++)
         {
-            string arg = args[argIndex];
+            string argument = arguments[argumentIndex];
 
-            if (arg == "--")
+            if (argument == "--")
             {
-                if (tryPushPending(null, out ArgumentToken? entry))
+                if (tryPushPending(null, out ArgumentToken? token))
                 {
-                    yield return entry;
+                    yield return token;
                 }
 
-                yield return new RestArgument(args[(argIndex + 1)..]);
+                yield return new Rest(arguments[(argumentIndex + 1)..]);
                 yield break;
             }
-            else if (arg.StartsWith("--"))
+            else if (argument.StartsWith("--"))
             {
-                if (tryPushPending(null, out ArgumentToken? entry))
+                if (tryPushPending(null, out ArgumentToken? token))
                 {
-                    yield return entry;
+                    yield return token;
                 }
 
-                state = new ParserState.PendingKeyValuePair(arg[2..]);
+                state = new ParserState.PendingKeyValuePair(argument[2..]);
             }
-            else if (arg.StartsWith('-'))
+            else if (argument.StartsWith('-'))
             {
-                foreach (char argChar in arg[1..])
+                foreach (char argChar in argument[1..])
                 {
-                    if (tryPushPending(null, out ArgumentToken? entry))
+                    if (tryPushPending(null, out ArgumentToken? token))
                     {
-                        yield return entry;
+                        yield return token;
                     }
 
                     state = new ParserState.PendingShorthandKeyValuePair(argChar);
                 }
             }
-            else if (tryPushPending(arg, out ArgumentToken? entry))
+            else if (tryPushPending(argument, out ArgumentToken? token))
             {
-                yield return entry;
+                yield return token;
             }
             else
             {
-                yield return new OrdinalValue(arg);
+                yield return new Ordinal(argument);
+            }
+        }
+
+        {
+            if (tryPushPending(null, out ArgumentToken? entry))
+            {
+                yield return entry;
             }
         }
     }
