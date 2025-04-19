@@ -5,19 +5,17 @@ using RizzziGit.Commons.Utilities;
 
 namespace RizzziGit.Commons.Arguments;
 
-public abstract partial record ArgumentToken
+public static partial class ArgumentParser
 {
     public static T Parse<T>(string[] args) => (T)Parse(typeof(T), args);
 
-    public static object Parse(Type type, string[] args, ArgumentTokenOptions? options = null)
+    public static object Parse(Type type, string[] args, ArgumentParserOptions? options = null)
     {
         options ??= new();
 
         ArgumentObjectAttribute argumentObjectAttribute =
             type.GetCustomAttribute<ArgumentObjectAttribute>()
-            ?? throw new ArgumentException(
-                $"Type {type.Name} does not have a {nameof(ArgumentObjectAttribute)}"
-            );
+            ?? throw new ArgumentObjectException(type, "Missing argument object attribute.");
 
         if (argumentObjectAttribute.Method == ParseMethod.Ordinal)
         {
@@ -25,15 +23,18 @@ public abstract partial record ArgumentToken
         }
         else
         {
-            throw new ArgumentException($"Unknown parse method: {argumentObjectAttribute.Method}");
+            throw new ArgumentObjectException(
+                type,
+                $"Unknown parse method: {argumentObjectAttribute.Method}."
+            );
         }
     }
 
-    private static object ParseOrdered(Type type, string[] arguments, ArgumentTokenOptions options)
+    private static object ParseOrdered(Type type, string[] arguments, ArgumentParserOptions options)
     {
         ConstructorInfo constructor =
             type.GetConstructor([])
-            ?? throw new ArgumentException($"Type {type.Name} does not have a default constructor");
+            ?? throw new ArgumentObjectException(type, "Missing zero-parameter constructor.");
 
         object instance = constructor.Invoke([]);
 
@@ -41,15 +42,15 @@ public abstract partial record ArgumentToken
             MapGroup mapGroup in GetMapGroups(GetMembers(type, instance), Parse(arguments), options)
         )
         {
-            foreach (PairMap pairMap in mapGroup.Pairs)
+            foreach (TagMap tagMap in mapGroup.Tags)
             {
                 SetValue(
-                    pairMap.Member.MemberInfo,
-                    pairMap.Member.Type,
+                    tagMap.Member.MemberInfo,
+                    tagMap.Member.Type,
                     instance,
-                    pairMap.Member.Attribute,
-                    pairMap.Member.Type,
-                    pairMap.Token.Value,
+                    tagMap.Member.Attribute,
+                    type,
+                    tagMap.Token.Value,
                     false
                 );
             }
@@ -61,8 +62,8 @@ public abstract partial record ArgumentToken
                     mapGroup.OrdinalMap.Member.Type,
                     instance,
                     mapGroup.OrdinalMap.Member.Attribute,
-                    mapGroup.OrdinalMap.Member.Type,
-                    mapGroup.OrdinalMap.Token,
+                    type,
+                    mapGroup.OrdinalMap.Token.Value,
                     false
                 );
             }
@@ -74,8 +75,8 @@ public abstract partial record ArgumentToken
                     mapGroup.RestMap.Member.Type,
                     instance,
                     mapGroup.RestMap.Member.Attribute,
-                    mapGroup.RestMap.Member.Type,
-                    mapGroup.RestMap.Token,
+                    type,
+                    mapGroup.RestMap.Token.Values,
                     true
                 );
             }
@@ -89,32 +90,32 @@ public abstract partial record ArgumentToken
         Type memberType,
         bool memberIsNullable,
         bool memberHasDefaultValue,
-        BaseArgumentAttribute attribute,
+        ArgumentAttribute attribute,
         [NotNullWhen(false)] out Exception? exception
     )
     {
         if (attribute.RequiresValue)
         {
             exception = ExceptionDispatchInfo.SetCurrentStackTrace(
-                new ArgumentException(
-                    $"Argument {attribute} needs a value since it has {nameof(ArgumentAttribute.RequiresValue)} property set to true in its argument attribute declaration."
+                new MissingArgumentException(
+                    attribute,
+                    $"`{nameof(TagArgumentAttribute.RequiresValue)}` property set to true in its argument attribute declaration."
                 )
             );
         }
         else if (memberRequiresValue)
         {
             exception = ExceptionDispatchInfo.SetCurrentStackTrace(
-                new ArgumentException(
-                    $"Argument {attribute} needs a value since it has a required modifier in its member declaration."
+                new MissingArgumentException(
+                    attribute,
+                    $"Has a required modifier in its member declaration."
                 )
             );
         }
         else if (!memberType.IsPrimitive && !memberIsNullable && !memberHasDefaultValue)
         {
             exception = ExceptionDispatchInfo.SetCurrentStackTrace(
-                new ArgumentException(
-                    $"Argument {attribute} needs a value since it is not nullable and has no default value."
-                )
+                new MissingArgumentException(attribute, $"Not nullable and has no default value.")
             );
         }
         else
@@ -129,7 +130,7 @@ public abstract partial record ArgumentToken
         MemberInfo memberInfo,
         Type memberType,
         object instance,
-        BaseArgumentAttribute attribute,
+        ArgumentAttribute attribute,
         Type type,
         object? value,
         bool isRest
@@ -171,27 +172,46 @@ public abstract partial record ArgumentToken
                             {
                                 ParameterInfo[] parameters = method.GetParameters();
 
-                                return
-                                    method.Name == attribute.Parser
-                                    && parameters.Length == 1
-                                    && isRest
-                                    ? parameters[0].ParameterType.IsAssignableTo(typeof(string[]))
-                                    : parameters[0].ParameterType.IsAssignableTo(typeof(string));
+                                if (method.Name != attribute.Parser || parameters.Length != 1)
+                                {
+                                    return false;
+                                }
+
+                                if (isRest)
+                                {
+                                    if (
+                                        !parameters[0]
+                                            .ParameterType.IsAssignableTo(typeof(string[]))
+                                    )
+                                    {
+                                        return false;
+                                    }
+                                }
+                                else if (
+                                    !parameters[0].ParameterType.IsAssignableTo(typeof(string))
+                                )
+                                {
+                                    return false;
+                                }
+
+                                return true;
                             }
                         ),
                 ];
 
                 if (parserMethods.Length > 1)
                 {
-                    throw new ArgumentException(
-                        $"Parser method name `{attribute.Parser}` is ambiguous."
+                    throw new ArgumentParserMethodException(
+                        attribute.Parser,
+                        "Ambiguous parser method name."
                     );
                 }
 
                 if (parserMethods.Length != 1)
                 {
-                    throw new ArgumentException(
-                        $"Type {type.Name} does not have a `{attribute.Parser}(string)` method."
+                    throw new ArgumentParserMethodException(
+                        attribute.Parser,
+                        "No parser found with the name."
                     );
                 }
 
@@ -200,12 +220,24 @@ public abstract partial record ArgumentToken
 
             if (method.ReturnType != memberType)
             {
-                throw new ArgumentException(
-                    $"Parser method `{attribute.Parser}` return type ({method.ReturnType.FullName}) does not match the expected declared type ({memberType.FullName}) of the property or field where the argument attribute is applied."
+                throw new ArgumentParserMethodException(
+                    attribute.Parser,
+                    $"Parser return type ({method.ReturnType.FullName}) and member type ({memberType.FullName}) does not match."
                 );
             }
 
-            setValue(method.Invoke(null, [value]));
+            try
+            {
+                setValue(method.Invoke(null, [value]));
+            }
+            catch (TargetInvocationException invocationException)
+            {
+                throw new ArgumentParserMethodException(
+                    attribute.Parser,
+                    $"Error invoking parser method: {invocationException.InnerException?.Message ?? "Unknown error."}",
+                    invocationException.InnerException
+                );
+            }
         }
         else if (valueType == memberType)
         {
@@ -215,14 +247,15 @@ public abstract partial record ArgumentToken
         {
             if (value is null)
             {
-                throw new ArgumentException($"Argument {attribute} has a required attribute");
+                throw new MissingArgumentException(attribute, $"Value cannot be null.");
             }
 
             setValue(Convert.ChangeType(value, memberType));
         }
         else
         {
-            throw new ArgumentException(
+            throw new ArgumentObjectException(
+                type,
                 $"Value type {valueType.FullName} cannot be automatically converted to type {memberType.FullName}."
             );
         }

@@ -7,9 +7,9 @@ using RizzziGit.Commons.Utilities;
 
 namespace RizzziGit.Commons.Arguments;
 
-public abstract partial record ArgumentToken
+public static partial class ArgumentParser
 {
-    private interface IMember
+    public interface IMember
     {
         public MemberInfo MemberInfo { get; }
         public Type Type { get; }
@@ -27,20 +27,20 @@ public abstract partial record ArgumentToken
         bool RequiresValue,
         bool IsNullable
     ) : IMember
-        where T : BaseArgumentAttribute
+        where T : ArgumentAttribute
     {
         public sealed override string ToString() => Attribute.ToString();
     }
 
-    private sealed record PairMember(
+    private sealed record TagMember(
         MemberInfo MemberInfo,
-        ArgumentAttribute Attribute,
+        TagArgumentAttribute Attribute,
         Type Type,
         bool HasDefaultValue,
         bool RequiresValue,
         bool IsNullable
     )
-        : Member<ArgumentAttribute>(
+        : Member<TagArgumentAttribute>(
             MemberInfo,
             Attribute,
             Type,
@@ -100,7 +100,7 @@ public abstract partial record ArgumentToken
         [NotNullWhen(true)] out IMember? result
     )
     {
-        if (!memberInfo.TryGetCustomAttribute(out BaseArgumentAttribute? attribute))
+        if (!memberInfo.TryGetCustomAttribute(out ArgumentAttribute? attribute))
         {
             result = null;
             return false;
@@ -143,9 +143,9 @@ public abstract partial record ArgumentToken
             return false;
         }
 
-        if (attribute is ArgumentAttribute baseArgumentAttribute)
+        if (attribute is TagArgumentAttribute baseArgumentAttribute)
         {
-            result = new PairMember(
+            result = new TagMember(
                 memberInfo,
                 baseArgumentAttribute,
                 memberType,

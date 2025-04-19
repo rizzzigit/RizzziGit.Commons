@@ -1,7 +1,7 @@
 namespace RizzziGit.Commons.Arguments;
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public abstract class BaseArgumentAttribute : Attribute
+public abstract class ArgumentAttribute : Attribute
 {
     public required string Title;
     public required string Description;
@@ -14,7 +14,7 @@ public abstract class BaseArgumentAttribute : Attribute
     public abstract override string ToString();
 }
 
-public class ArgumentAttribute : BaseArgumentAttribute
+public class TagArgumentAttribute : ArgumentAttribute
 {
     public required string Key;
     public required char ShortKey;
@@ -23,12 +23,12 @@ public class ArgumentAttribute : BaseArgumentAttribute
         $"{(RequiresValue ? $"<-{ShortKey}|--{Key} {Hint}>" : $"[-{ShortKey}|--{Key} {Hint}]")}";
 }
 
-public sealed class OrdinalArgumentAttribute : BaseArgumentAttribute
+public sealed class OrdinalArgumentAttribute : ArgumentAttribute
 {
     public override string ToString() => $"{(RequiresValue ? $"<{Hint}>" : $"[{Hint}]")}";
 }
 
-public sealed class RestArgumentAttribute : BaseArgumentAttribute
+public sealed class RestArgumentAttribute : ArgumentAttribute
 {
     public override string ToString() => $"{(RequiresValue ? "<...>" : "[...]")}";
 }

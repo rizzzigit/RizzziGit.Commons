@@ -3,14 +3,14 @@ using RizzziGit.Commons.Utilities;
 
 namespace RizzziGit.Commons.Arguments;
 
-public abstract partial record ArgumentToken
+public static partial class ArgumentParser
 {
-    private sealed record MapGroup(PairMap[] Pairs, OrdinalMap? OrdinalMap, RestMap? RestMap);
+    private sealed record MapGroup(TagMap[] Tags, OrdinalMap? OrdinalMap, RestMap? RestMap);
 
     private static IEnumerable<MapGroup> GetMapGroups(
         IEnumerable<IMember> members,
         IEnumerable<ArgumentToken> tokens,
-        ArgumentTokenOptions options
+        ArgumentParserOptions options
     )
     {
         IEnumerator<MemberGroup> memberGroups = GetMemberGroups(members).GetEnumerator();
@@ -25,7 +25,7 @@ public abstract partial record ArgumentToken
             {
                 while (tokenGroups.MoveNext())
                 {
-                    unknownTokens.AddRange(tokenGroups.Current.Pairs);
+                    unknownTokens.AddRange(tokenGroups.Current.Tags);
 
                     if (tokenGroups.Current.Ordinal is not null)
                     {
@@ -48,15 +48,15 @@ public abstract partial record ArgumentToken
                         .Prepend(memberGroups.Current)
                 )
                 {
-                    foreach (PairMember pair in memberGroup.Pairs)
+                    foreach (TagMember tag in memberGroup.Tags)
                     {
                         if (
                             !ValidateNullability(
-                                pair.RequiresValue,
-                                pair.Type,
-                                pair.IsNullable,
-                                pair.HasDefaultValue,
-                                pair.Attribute,
+                                tag.RequiresValue,
+                                tag.Type,
+                                tag.IsNullable,
+                                tag.HasDefaultValue,
+                                tag.Attribute,
                                 out Exception? exception
                             )
                         )
@@ -103,38 +103,38 @@ public abstract partial record ArgumentToken
                 MemberGroup memberGroup = memberGroups.Current;
                 TokenGroup tokenGroup = tokenGroups.Current;
 
-                List<PairMap> pairs = [];
+                List<TagMap> tags = [];
                 OrdinalMap? ordinal = null;
                 RestMap? rest = null;
 
-                List<BasePair> tokenPairs = [.. tokenGroup.Pairs];
-                foreach (PairMember pairMember in memberGroup.Pairs)
+                List<ArgumentToken.BaseTag> tokenTags = [.. tokenGroup.Tags];
+                foreach (TagMember tagMember in memberGroup.Tags)
                 {
-                    BasePair? pair = tokenPairs.FirstOrDefault(
-                        (basePair) =>
+                    ArgumentToken.BaseTag? tag = tokenTags.FirstOrDefault(
+                        (baseTag) =>
                             (
-                                basePair is Pair pair
-                                && pair.Key.Equals(
-                                    pairMember.Attribute.Key,
+                                baseTag is ArgumentToken.Tag tag
+                                && tag.Key.Equals(
+                                    tagMember.Attribute.Key,
                                     StringComparison.CurrentCultureIgnoreCase
                                 )
                             )
                             || (
-                                basePair is ShortPair shortPair
-                                && char.ToUpperInvariant(shortPair.Key)
-                                    .Equals(char.ToUpperInvariant(pairMember.Attribute.ShortKey))
+                                baseTag is ArgumentToken.ShortTag shortTag
+                                && char.ToUpperInvariant(shortTag.Key)
+                                    .Equals(char.ToUpperInvariant(tagMember.Attribute.ShortKey))
                             )
                     );
 
-                    if (pair is null)
+                    if (tag is null)
                     {
                         if (
                             !ValidateNullability(
-                                pairMember.RequiresValue,
-                                pairMember.Type,
-                                pairMember.IsNullable,
-                                pairMember.HasDefaultValue,
-                                pairMember.Attribute,
+                                tagMember.RequiresValue,
+                                tagMember.Type,
+                                tagMember.IsNullable,
+                                tagMember.HasDefaultValue,
+                                tagMember.Attribute,
                                 out Exception? exception
                             )
                         )
@@ -145,13 +145,13 @@ public abstract partial record ArgumentToken
                         continue;
                     }
 
-                    pairs.Add(new(pairMember, pair));
-                    tokenPairs.Remove(pair);
+                    tags.Add(new(tagMember, tag));
+                    tokenTags.Remove(tag);
                 }
 
-                foreach (BasePair tokenPair in tokenPairs)
+                foreach (ArgumentToken.BaseTag tokenTag in tokenTags)
                 {
-                    unknownTokens.Add(tokenPair);
+                    unknownTokens.Add(tokenTag);
                 }
 
                 if (tokenGroup.Ordinal is null)
@@ -206,7 +206,7 @@ public abstract partial record ArgumentToken
                     unknownTokens.Add(tokenGroup.Rest);
                 }
 
-                yield return new MapGroup([.. pairs], ordinal, rest);
+                yield return new MapGroup([.. tags], ordinal, rest);
             }
         }
 
@@ -220,7 +220,7 @@ public abstract partial record ArgumentToken
                         unknownTokens.Select(
                             (token) =>
                                 ExceptionDispatchInfo.SetCurrentStackTrace(
-                                    new ArgumentException($"Unknown token: {token}", nameof(tokens))
+                                    new UnknownArgumentException(token, "Unknown argument")
                                 )
                         )
                     );

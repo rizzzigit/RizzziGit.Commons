@@ -2,15 +2,15 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace RizzziGit.Commons.Arguments;
 
-public abstract partial record ArgumentToken
+public static partial class ArgumentParser
 {
     private abstract record ParserState
     {
         private ParserState() { }
 
-        public sealed record PendingKeyValuePair(string Key) : ParserState;
+        public sealed record PendingTag(string Key) : ParserState;
 
-        public sealed record PendingShorthandKeyValuePair(char Key) : ParserState;
+        public sealed record PendingShortTag(char Key) : ParserState;
 
         public sealed record None : ParserState;
     }
@@ -21,17 +21,17 @@ public abstract partial record ArgumentToken
 
         bool tryPushPending(string? value, [NotNullWhen(true)] out ArgumentToken? result)
         {
-            if (state is ParserState.PendingKeyValuePair(string key))
+            if (state is ParserState.PendingTag(string key))
             {
                 state = new ParserState.None();
-                result = new Pair(key, value);
+                result = new ArgumentToken.Tag(key, value);
                 return true;
             }
 
-            if (state is ParserState.PendingShorthandKeyValuePair(char shorthandKey))
+            if (state is ParserState.PendingShortTag(char shorthandKey))
             {
                 state = new ParserState.None();
-                result = new ShortPair(shorthandKey, value);
+                result = new ArgumentToken.ShortTag(shorthandKey, value);
                 return true;
             }
 
@@ -50,7 +50,7 @@ public abstract partial record ArgumentToken
                     yield return token;
                 }
 
-                yield return new Rest(arguments[(argumentIndex + 1)..]);
+                yield return new ArgumentToken.Rest(arguments[(argumentIndex + 1)..]);
                 yield break;
             }
             else if (argument.StartsWith("--"))
@@ -60,7 +60,7 @@ public abstract partial record ArgumentToken
                     yield return token;
                 }
 
-                state = new ParserState.PendingKeyValuePair(argument[2..]);
+                state = new ParserState.PendingTag(argument[2..]);
             }
             else if (argument.StartsWith('-'))
             {
@@ -71,7 +71,7 @@ public abstract partial record ArgumentToken
                         yield return token;
                     }
 
-                    state = new ParserState.PendingShorthandKeyValuePair(argChar);
+                    state = new ParserState.PendingShortTag(argChar);
                 }
             }
             else if (tryPushPending(argument, out ArgumentToken? token))
@@ -80,7 +80,7 @@ public abstract partial record ArgumentToken
             }
             else
             {
-                yield return new Ordinal(argument);
+                yield return new ArgumentToken.Ordinal(argument);
             }
         }
 

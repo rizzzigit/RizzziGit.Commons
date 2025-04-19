@@ -1,6 +1,7 @@
 namespace RizzziGit.Commons.Arguments;
 
-public sealed record ArgumentTokenOptions
+public sealed record ArgumentParserOptions
 {
     public bool IgnoreUnknownTokens = false;
+
 }
